@@ -17,8 +17,11 @@
   <header class="topbar">
     <a class="brand" href="#" id="brand" aria-label="Raíces, ir a la persona de inicio">
       <svg viewBox="0 0 48 48" aria-hidden="true"><use href="#logo" /></svg>
-      <span>Raíces</span>
     </a>
+    <button class="tree-title" id="tree-title" title="Cambiar el nombre del árbol">
+      <strong id="tree-name">Raíces</strong>
+      <small id="tree-count"></small>
+    </button>
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-view="tree"><svg aria-hidden="true"><use href="#i-tree" /></svg><span>Árbol</span></button>
       <button class="tab" data-view="people"><svg aria-hidden="true"><use href="#i-people" /></svg><span>Personas</span></button>
@@ -26,6 +29,7 @@
       <button class="tab" data-view="stats"><svg aria-hidden="true"><use href="#i-chart" /></svg><span>Estadísticas</span></button>
     </nav>
     <div class="top-actions">
+      <button class="icon-btn search-toggle" id="search-toggle" aria-label="Buscar"><svg aria-hidden="true"><use href="#i-search" /></svg></button>
       <div class="search">
         <svg aria-hidden="true"><use href="#i-search" /></svg>
         <input id="search" type="search" placeholder="Buscar persona…" autocomplete="off" aria-label="Buscar persona" />
@@ -37,11 +41,13 @@
         </button>
         <div id="menu" class="menu" hidden>
           <button data-action="import-ged"><svg><use href="#i-upload" /></svg>Importar GEDCOM…</button>
-          <button data-action="export-ged"><svg><use href="#i-download" /></svg>Exportar GEDCOM</button>
+          <button data-action="export-ged"><svg><use href="#i-download" /></svg>Exportar GEDCOM completo</button>
+          <button data-action="export-ged-private"><svg><use href="#i-lock" /></svg>Exportar GEDCOM para compartir (oculta a los vivos)</button>
           <hr />
           <button data-action="export-json"><svg><use href="#i-download" /></svg>Copia de seguridad (con fotos)</button>
           <button data-action="import-json"><svg><use href="#i-upload" /></svg>Restaurar copia…</button>
           <hr />
+          <button data-action="rename"><svg><use href="#i-edit" /></svg>Cambiar nombre del árbol</button>
           <button data-action="sample"><svg><use href="#i-tree" /></svg>Cargar árbol de ejemplo</button>
           <button data-action="print"><svg><use href="#i-print" /></svg>Imprimir / PDF</button>
           <button data-action="clear" class="danger"><svg><use href="#i-trash" /></svg>Borrar todo el árbol</button>
@@ -55,8 +61,8 @@
     <section id="view-tree" class="view active" aria-label="Árbol">
       <svg id="tree-svg" role="img" aria-label="Árbol genealógico">
         <defs>
-          <clipPath id="card-clip"><rect width="184" height="76" rx="14" /></clipPath>
-          <clipPath id="avatar-clip"><circle cx="36" cy="38" r="24" /></clipPath>
+          <clipPath id="card-clip"><rect width="148" height="132" rx="14" /></clipPath>
+          <clipPath id="avatar-clip"><circle cx="74" cy="44" r="30" /></clipPath>
         </defs>
         <g id="viewport"></g>
       </svg>
@@ -76,15 +82,11 @@
         <button class="icon-btn" id="zoom-home" aria-label="Ir a la persona de inicio"><svg><use href="#i-home" /></svg></button>
       </div>
 
-      <div id="empty" class="empty" hidden>
-        <svg class="empty-logo" viewBox="0 0 48 48" aria-hidden="true"><use href="#logo" /></svg>
-        <h1>Empieza tu árbol genealógico</h1>
-        <p>Añádete a ti mismo y ve completando padres, abuelos, hijos y hermanos. Todo se guarda en este dispositivo.</p>
-        <div class="empty-actions">
-          <button class="btn primary" data-action="first-person">Añadir la primera persona</button>
-          <button class="btn" data-action="import-ged">Importar GEDCOM (MyHeritage, Ancestry…)</button>
-          <button class="btn ghost" data-action="sample">Ver un árbol de ejemplo</button>
-        </div>
+      <div id="welcome" class="welcome card-box" hidden role="status">
+        <button class="icon-btn welcome-close" id="welcome-close" aria-label="Cerrar"><svg><use href="#i-close" /></svg></button>
+        <h2 id="welcome-title">¡Hola!</h2>
+        <p id="welcome-text"></p>
+        <div id="welcome-illus" class="welcome-illus" aria-hidden="true"></div>
       </div>
     </section>
 
@@ -130,6 +132,8 @@
     </aside>
   </main>
 
+  <div id="onboarding" class="onboarding" hidden></div>
+
   <dialog id="modal" class="modal">
     <form method="dialog" id="modal-form" novalidate></form>
   </dialog>
@@ -162,6 +166,7 @@
     <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 11 12 4l8 7v9h-5v-6H9v6H4z" /></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="m6 6 12 12M18 6 6 18" /></symbol>
     <symbol id="i-swap" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 4 3 8l4 4M3 8h14m0 12 4-4-4-4m4 4H7" /></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2" /></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" /></symbol>
   </svg>
 

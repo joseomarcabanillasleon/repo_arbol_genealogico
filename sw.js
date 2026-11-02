@@ -1,8 +1,8 @@
 // Service worker: permite usar la app sin conexión (los datos ya viven en el dispositivo).
-const CACHE = 'raices-v1';
+const CACHE = 'raices-v2';
 const ASSETS = [
   './', 'index.html', 'css/styles.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png',
-  'js/app.js', 'js/store.js', 'js/layout.js', 'js/gedcom.js', 'js/relationship.js', 'js/dates.js', 'js/sample.js',
+  'js/app.js', 'js/store.js', 'js/layout.js', 'js/gedcom.js', 'js/relationship.js', 'js/dates.js', 'js/sample.js', 'js/avatars.js', 'js/onboarding.js',
 ];
 
 self.addEventListener('install', (e) => {

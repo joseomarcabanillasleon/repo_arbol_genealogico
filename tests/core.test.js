@@ -4,7 +4,7 @@ import { FamilyTree, fullName } from '../js/store.js';
 import { normalizeDate, formatDate, yearOf } from '../js/dates.js';
 import { importGedcom, exportGedcom } from '../js/gedcom.js';
 import { relationship } from '../js/relationship.js';
-import { computeLayout, CW, CH } from '../js/layout.js';
+import { computeLayout } from '../js/layout.js';
 import { buildSample } from '../js/sample.js';
 
 const sample = () => {
@@ -182,7 +182,7 @@ test('layout: sin solapes entre tarjetas', () => {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i];
         const b = nodes[j];
-        const overlap = a.x < b.x + CW && b.x < a.x + CW && a.y < b.y + CH && b.y < a.y + CH;
+        const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
         assert.equal(overlap, false, `solape en foco ${t.get(focus).givenName}: ${a.id} / ${b.id}`);
       }
     }
@@ -195,4 +195,56 @@ test('layout: huecos para añadir progenitores que faltan', () => {
   const a = t.addPerson({ givenName: 'Solo' });
   const { nodes } = computeLayout(t, a);
   assert.deepEqual(nodes.filter((n) => n.ghost).map((n) => n.ghost), ['M', 'F']);
+  // con padres reales, aparecen huecos para los 4 abuelos
+  t.addParent(a, { givenName: 'P', sex: 'M' });
+  t.addParent(a, { givenName: 'M', sex: 'F' });
+  const l2 = computeLayout(t, a);
+  assert.equal(l2.nodes.filter((n) => n.ghost).length, 4);
+  // pero no más allá de ghostDepth
+  assert.equal(computeLayout(t, a, { ghostDepth: 1 }).nodes.filter((n) => n.ghost).length, 0);
+});
+
+test('GEDCOM: exportación privada oculta a las personas vivas', () => {
+  const { t, ids } = sample();
+  const ged = exportGedcom(t, { privateLiving: true });
+  assert.ok(!ged.includes('Daniel'), 'Daniel (vivo) no debe aparecer');
+  assert.ok(ged.includes('Jorge'), 'Jorge (fallecido) sí aparece');
+  assert.ok(!ged.includes('Analista de datos'));
+  const t2 = new FamilyTree(importGedcom(ged));
+  assert.equal(t2.size, t.size); // la estructura se conserva
+  assert.equal(t.isLiving(ids.daniel), true);
+  assert.equal(t.isLiving(ids.manuel), false);
+});
+
+test('store: nombre del árbol', () => {
+  const { t } = sample();
+  assert.equal(t.displayName(), 'Familia Herrera Soler');
+  t.rename('Los Herrera');
+  assert.equal(new FamilyTree(t.toJSON()).displayName(), 'Los Herrera');
+});
+
+test('asistente: apellidos sugeridos, pasos visibles y creación', async () => {
+  const { suggestParentSurname, activeSteps, commitWizard } = await import('../js/onboarding.js');
+  assert.equal(suggestParentSurname('Herrera Soler', 'M'), 'Herrera');
+  assert.equal(suggestParentSurname('Herrera Soler', 'F'), 'Soler');
+  assert.equal(suggestParentSurname('Herrera', 'F'), '');
+  // sin padres: solo tú, madre y padre
+  assert.deepEqual(activeSteps({}).map((s) => s.key), ['me', 'mother', 'father']);
+  // con madre: aparecen sus padres
+  assert.deepEqual(activeSteps({ mother: { givenName: 'Lucía' } }).map((s) => s.key), ['me', 'mother', 'father', 'mgm', 'mgf']);
+  const t = new FamilyTree();
+  const me = commitWizard(t, {
+    me: { givenName: 'Daniel', surname: 'Herrera Soler', sex: 'M', birth: '1992', place: 'Valencia' },
+    mother: { givenName: 'Lucía', surname: 'Soler', birth: '22/09/1966', living: true },
+    father: null,
+    mgm: { givenName: 'Pilar', surname: 'Navarro', living: false },
+  });
+  assert.equal(t.rootId, me);
+  assert.equal(t.size, 3);
+  const [mom] = t.parents(me).map((id) => t.get(id));
+  assert.equal(mom.sex, 'F');
+  assert.equal(mom.birth.date, '22 SEP 1966');
+  const [grandma] = t.parents(mom.id).map((id) => t.get(id));
+  assert.equal(grandma.deceased, true);
+  assert.equal(relationship(t, me, grandma.id).label, 'abuela');
 });

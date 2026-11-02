@@ -1,9 +1,11 @@
 import { FamilyTree, fullName, lifeYears, normalize } from './store.js';
-import { computeLayout, CW, CH } from './layout.js';
+import { computeLayout, CW, CH, GW } from './layout.js';
 import { importGedcom, exportGedcom } from './gedcom.js';
 import { relationship } from './relationship.js';
 import { formatDate, normalizeDate, yearOf } from './dates.js';
 import { buildSample } from './sample.js';
+import { silhouetteSVG, silhouetteInner } from './avatars.js';
+import { createOnboarding } from './onboarding.js';
 
 const STORAGE_KEY = 'raices.tree.v1';
 const PREFS_KEY = 'raices.prefs.v1';
@@ -64,13 +66,10 @@ function toast(msg, ms = 3000) {
   toastTimer = setTimeout(() => (el.hidden = true), ms);
 }
 
-function initials(p) {
-  return ((p.givenName[0] || '') + (p.surname[0] || '')).toUpperCase() || '?';
-}
 
 function avatarHTML(p, cls = 'dot') {
   if (p.photo) return `<img class="${cls} sex-${p.sex}" src="${esc(p.photo)}" alt="" loading="lazy" />`;
-  return `<span class="${cls} sex-${p.sex}">${esc(initials(p))}</span>`;
+  return silhouetteSVG(p.sex, cls);
 }
 
 function chipHTML(p, sub = '') {
@@ -117,8 +116,7 @@ function renderAll() {
 }
 
 function renderView() {
-  const empty = tree.size === 0;
-  $('#empty').hidden = !empty;
+  syncChrome();
   if (state.view === 'tree') renderTree({ center: false });
   if (state.view === 'people') renderPeople();
   if (state.view === 'relation') renderRelation();
@@ -154,10 +152,12 @@ function renderTree({ center = false, animate = false } = {}) {
   const nodesG = el('g', {}, viewport);
   for (const n of layout.nodes) {
     if (n.ghost) {
-      const g = el('g', { class: 'ghost-card', transform: `translate(${n.x},${n.y})`, 'data-ghost': n.ghost, 'data-child': n.childOf, role: 'button', tabindex: 0 }, nodesG);
-      el('rect', { width: CW, height: CH, rx: 14 }, g);
-      const t = el('text', { x: CW / 2, y: CH / 2 + 5, 'text-anchor': 'middle' }, g);
-      t.textContent = n.ghost === 'M' ? '+ Añadir padre' : n.ghost === 'F' ? '+ Añadir madre' : '+ Añadir progenitor';
+      const label = n.ghost === 'M' ? 'Añadir padre' : n.ghost === 'F' ? 'Añadir madre' : 'Añadir progenitor';
+      const g = el('g', { class: 'ghost-card', transform: `translate(${n.x},${n.y})`, 'data-ghost': n.ghost, 'data-child': n.childOf, role: 'button', tabindex: 0, 'aria-label': label }, nodesG);
+      el('title', {}, g).textContent = label;
+      el('rect', { width: GW, height: GW, rx: 12 }, g);
+      const t = el('text', { x: GW / 2, y: GW / 2 + 11, 'text-anchor': 'middle' }, g);
+      t.textContent = '+';
       continue;
     }
     const p = tree.get(n.id);
@@ -170,23 +170,29 @@ function renderTree({ center = false, animate = false } = {}) {
       'aria-label': `${fullName(p)} ${lifeYears(p)}`,
     }, nodesG);
     el('title', {}, g).textContent = `${fullName(p)}${lifeYears(p) ? ' · ' + lifeYears(p) : ''}`;
+    // pestaña "+" bajo la tarjeta para añadir familiares de esta persona
+    const tab = el('g', { class: 'plus-tab', 'data-plus': p.id, role: 'button', 'aria-label': `Añadir familiar de ${fullName(p)}` }, g);
+    el('path', { d: `M${CW / 2 - 30},${CH - 4}h60l-10,18q-4,6-10,6h-20q-6,0-10-6z` }, tab);
+    el('path', { class: 'plus-sign', d: `M${CW / 2 - 5},${CH + 9}h10M${CW / 2},${CH + 4}v10` }, tab);
     el('rect', { class: 'shadow', width: CW, height: CH, rx: 14, y: 2 }, g);
     const inner = el('g', { 'clip-path': 'url(#card-clip)' }, g);
     el('rect', { class: 'bg', width: CW, height: CH, rx: 14 }, inner);
-    el('rect', { class: 'accent', width: 5, height: CH }, inner);
-    el('rect', { class: 'bg', width: CW, height: CH, rx: 14, fill: 'none', style: 'fill:none' }, g);
-    el('circle', { class: 'avatar-bg', cx: 36, cy: CH / 2, r: 24 }, g);
+    el('rect', { class: 'accent', width: CW, height: 5 }, inner);
+    el('rect', { class: 'frame', width: CW, height: CH, rx: 14 }, g);
+    const av = el('g', { 'clip-path': 'url(#avatar-clip)', class: 'avatar' }, g);
     if (p.photo) {
-      el('image', { class: 'avatar', href: p.photo, x: 12, y: CH / 2 - 24, width: 48, height: 48, 'clip-path': 'url(#avatar-clip)', preserveAspectRatio: 'xMidYMid slice' }, g);
+      el('circle', { class: 'avatar-bg', cx: CW / 2, cy: 44, r: 30 }, av);
+      el('image', { href: p.photo, x: CW / 2 - 30, y: 14, width: 60, height: 60, preserveAspectRatio: 'xMidYMid slice' }, av);
     } else {
-      const t = el('text', { class: 'initials', x: 36, y: CH / 2 + 6, 'text-anchor': 'middle' }, g);
-      t.textContent = initials(p);
+      const sil = el('svg', { x: CW / 2 - 30, y: 14, width: 60, height: 60, viewBox: '0 0 100 100' }, av);
+      sil.innerHTML = silhouetteInner(p.sex);
     }
-    const nm = el('text', { class: 'name', x: 70, y: 26 }, g);
-    nm.textContent = clip(p.givenName || 'Sin nombre', 15);
-    const sn = el('text', { class: 'surname', x: 70, y: 44 }, g);
-    sn.textContent = clip(p.surname, 16);
-    const yr = el('text', { class: 'years', x: 70, y: 62 }, g);
+    el('circle', { class: 'avatar-ring', cx: CW / 2, cy: 44, r: 30 }, g);
+    const nm = el('text', { class: 'name', x: CW / 2, y: 94, 'text-anchor': 'middle' }, g);
+    nm.textContent = clip(p.givenName || 'Sin nombre', 17);
+    const sn = el('text', { class: 'surname', x: CW / 2, y: 110, 'text-anchor': 'middle' }, g);
+    sn.textContent = clip(p.surname, 19);
+    const yr = el('text', { class: 'years', x: CW / 2, y: 125, 'text-anchor': 'middle' }, g);
     yr.textContent = lifeYears(p);
   }
 
@@ -228,7 +234,7 @@ function fitAll() {
   if (!lastLayout) return;
   const b = lastLayout.bounds;
   const { w, h } = visibleArea();
-  const k = Math.min(1.4, Math.max(0.15, Math.min((w - 40) / b.w, (h - 80) / b.h)));
+  const k = Math.min(1, Math.max(0.15, Math.min((w - 40) / b.w, (h - 120) / b.h)));
   state.t = { k, x: (w - b.w * k) / 2 - b.x * k, y: (h - b.h * k) / 2 - b.y * k + 20 };
   applyTransform(true);
 }
@@ -322,6 +328,8 @@ function zoomAt(factor, cx, cy) {
 })();
 
 function handleTreeTap(target) {
+  const plus = target.closest?.('[data-plus]');
+  if (plus) return openAddMenu(plus.dataset.plus);
   const ghost = target.closest?.('[data-ghost]');
   if (ghost) {
     const sex = ghost.dataset.ghost;
@@ -382,7 +390,7 @@ function renderPanel() {
 
   $('#panel-body').innerHTML = `
     <div class="p-head">
-      ${p.photo ? `<img class="p-avatar" src="${esc(p.photo)}" alt="" />` : `<div class="p-avatar sex-${p.sex}">${esc(initials(p))}</div>`}
+      ${p.photo ? `<img class="p-avatar" src="${esc(p.photo)}" alt="" />` : silhouetteSVG(p.sex, 'p-avatar')}
       <div>
         <h3>${esc(fullName(p))}</h3>
         <div class="years">${esc(lifeYears(p))}${isRoot ? ' · Persona de inicio' : ''}</div>
@@ -593,7 +601,7 @@ function openPersonForm({ mode, anchor, sex }) {
             <label class="field"><span>Lugar</span><input type="text" name="birthPlace" value="${v(p?.birth.place)}" placeholder="Ciudad, provincia, país" /></label>
           </div>
         </fieldset>
-        <label class="check"><input type="checkbox" name="deceased" ${p?.deceased ? 'checked' : ''} /> Ha fallecido</label>
+        <label class="check"><input type="checkbox" name="living" ${p?.deceased ? '' : 'checked'} /> Vive</label>
         <fieldset data-deceased ${p?.deceased ? '' : 'hidden'}><legend>Defunción</legend>
           <div class="row2">
             <label class="field"><span>Fecha</span><input type="text" name="deathDate" value="${fmt(p?.death.date)}" placeholder="dd/mm/aaaa o año" /></label>
@@ -629,7 +637,7 @@ function openPersonForm({ mode, anchor, sex }) {
       surname: fd.get('surname')?.trim(),
       sex: fd.get('sex'),
       birth: { date: normalizeDate(fd.get('birthDate')), place: fd.get('birthPlace')?.trim() },
-      deceased: fd.get('deceased') === 'on',
+      deceased: fd.get('living') !== 'on',
       death: { date: normalizeDate(fd.get('deathDate')), place: fd.get('deathPlace')?.trim() },
       occupation: fd.get('occupation')?.trim(),
       photo: photoData,
@@ -684,8 +692,8 @@ function openPersonForm({ mode, anchor, sex }) {
     if (ns) ns.style.display = src === 'new' ? 'grid' : 'none';
   };
   $$('input[name=src]', form).forEach((r) => r.addEventListener('change', toggleSrc));
-  form.querySelector('input[name=deceased]').addEventListener('change', (e) => {
-    form.querySelector('[data-deceased]').hidden = !e.target.checked;
+  form.querySelector('input[name=living]').addEventListener('change', (e) => {
+    form.querySelector('[data-deceased]').hidden = e.target.checked;
   });
   const other = form.querySelector('select[name=otherParent]');
   const surnameInput = form.querySelector('input[name=surname]');
@@ -911,6 +919,12 @@ function runAction(action) {
       if (!tree.size) return toast('El árbol está vacío');
       download(`arbol-${today()}.ged`, exportGedcom(tree), 'text/plain;charset=utf-8');
       return toast('GEDCOM exportado. Las fotos locales no se incluyen; usa la copia de seguridad para conservarlas.', 5000);
+    case 'export-ged-private':
+      if (!tree.size) return toast('El árbol está vacío');
+      download(`arbol-compartir-${today()}.ged`, exportGedcom(tree, { privateLiving: true }), 'text/plain;charset=utf-8');
+      return toast('GEDCOM para compartir exportado: las personas vivas aparecen como «Privado», sin fechas ni lugares.', 5000);
+    case 'rename':
+      return openRename();
     case 'export-json':
       if (!tree.size) return toast('El árbol está vacío');
       download(`raices-copia-${today()}.json`, JSON.stringify(tree.toJSON()), 'application/json');
@@ -919,8 +933,8 @@ function runAction(action) {
       return replaceTree('Cargar árbol de ejemplo', () => {
         const s = buildSample();
         tree.load(s.data);
-        tree.setRoot(s.rootId);
         state.focus = s.rootId;
+        tree.setRoot(s.rootId); // notifica el cambio: guarda y repinta
         state.panelOpen = false;
         setView('tree');
         renderTree({ center: true });
@@ -964,6 +978,7 @@ $('#file-ged').addEventListener('change', async (e) => {
     replaceTree('Importar GEDCOM', () => {
       tree.load(result);
       state.focus = tree.rootId;
+      tree.changed();
       state.panelOpen = false;
       setView('tree');
       renderTree({ center: true });
@@ -984,6 +999,7 @@ $('#file-json').addEventListener('change', async (e) => {
     replaceTree('Restaurar copia', () => {
       tree.load(data);
       state.focus = tree.rootId;
+      tree.changed();
       setView('tree');
       renderTree({ center: true });
       toast(`Copia restaurada: ${tree.size} personas`);
@@ -994,6 +1010,54 @@ $('#file-json').addEventListener('change', async (e) => {
 });
 
 $$('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
+
+// ---------------- cabecera, bienvenida y primeros pasos ----------------
+const onboarding = createOnboarding({
+  root: $('#onboarding'),
+  tree,
+  onImport: () => $('#file-ged').click(),
+  onSample: () => runAction('sample'),
+  onFinish: ({ rootId, name, count }) => {
+    state.focus = rootId;
+    state.panelOpen = false;
+    setView('tree');
+    renderTree({ center: true });
+    setTimeout(fitAll, 30);
+    showWelcome(name, count);
+  },
+});
+
+function syncChrome() {
+  const empty = tree.size === 0;
+  if (empty) onboarding.show();
+  else onboarding.hide();
+  $('#tree-name').textContent = tree.displayName();
+  $('#tree-count').textContent = empty ? '' : `${tree.size} ${tree.size === 1 ? 'persona' : 'personas'}`;
+}
+
+function showWelcome(name, count) {
+  $('#welcome-title').textContent = `¡Hola, ${name}!`;
+  $('#welcome-text').textContent = `Tu árbol ya tiene ${count} ${count === 1 ? 'persona' : 'personas'}. Toca el botón + bajo cualquier tarjeta para seguir añadiendo familiares, y abre una ficha para poner fotos, fechas e historias.`;
+  $('#welcome-illus').innerHTML = ['M', 'F', 'U', 'F', 'M'].map((sx) => silhouetteSVG(sx)).join('');
+  $('#welcome').hidden = false;
+}
+$('#welcome-close').addEventListener('click', () => ($('#welcome').hidden = true));
+svg.addEventListener('pointerdown', () => ($('#welcome').hidden = true));
+
+function openRename() {
+  openModal(`
+    <div class="m-head"><h2>Nombre del árbol</h2><p>Déjalo vacío para usar «Familia + apellidos» de la persona de inicio.</p></div>
+    <div class="m-body"><label class="field"><span>Nombre</span><input type="text" name="name" value="${esc(tree.name)}" placeholder="${esc(tree.displayName())}" /></label></div>
+    <div class="m-foot"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="save">Guardar</button></div>`,
+  (fd) => tree.rename(fd.get('name')));
+}
+$('#tree-title').addEventListener('click', () => tree.size && openRename());
+
+$('#search-toggle').addEventListener('click', () => {
+  document.body.classList.toggle('search-open');
+  if (document.body.classList.contains('search-open')) $('#search').focus();
+});
+$('#search').addEventListener('blur', () => setTimeout(() => !$('#search').value && document.body.classList.remove('search-open'), 200));
 
 // ---------------- arranque ----------------
 setView('tree');

@@ -154,7 +154,11 @@ function eventLines(tag, ev, forceY = false) {
   return out;
 }
 
-export function exportGedcom(tree) {
+/**
+ * @param {object} opts.privateLiving  si es true, las personas vivas se exportan como "Privado"
+ *   (solo apellidos, sexo y vínculos), para poder compartir el archivo sin exponer datos de vivos.
+ */
+export function exportGedcom(tree, { privateLiving = false } = {}) {
   const people = tree.all();
   const fams = Object.values(tree.families);
   const pRef = Object.fromEntries(people.map((p, i) => [p.id, `@I${i + 1}@`]));
@@ -173,7 +177,11 @@ export function exportGedcom(tree) {
     '0 @SUB1@ SUBM',
     '1 NAME Usuario de Raices',
   ];
-  for (const p of people) {
+  for (const real of people) {
+    const priv = privateLiving && tree.isLiving(real.id);
+    const p = priv
+      ? { ...real, givenName: 'Privado', occupation: '', birth: { date: '', place: '' }, photo: '', notes: '' }
+      : real;
     L.push(line(0, 'INDI', '', pRef[p.id]));
     L.push(line(1, 'NAME', `${p.givenName} /${p.surname}/`.trim()));
     if (p.givenName) L.push(line(2, 'GIVN', p.givenName));

@@ -8,13 +8,15 @@ Funciona en el navegador del ordenador y del móvil, y se puede instalar en el i
 
 | Área | Qué hace |
 |---|---|
-| **Árbol interactivo** | Vista "reloj de arena": antepasados arriba (hasta 6 generaciones), persona central con hermanos y parejas, descendientes abajo (hasta 5). Arrastrar, rueda/pellizco para zoom, "ver todo" e "inicio". |
+| **Primeros pasos guiados** | Pantalla "¿Cómo quieres empezar?" (crear, importar GEDCOM o ver ejemplo), introducción breve y asistente paso a paso: tú → madre → padre → abuelos, con apellidos sugeridos y casilla "Vive". Al terminar, mensaje de bienvenida. |
+| **Árbol interactivo** | Tarjetas verticales con foto o silueta y botón **+** para añadir familiares; huecos punteados para padres y abuelos que faltan. Vista "reloj de arena": antepasados arriba (hasta 6 generaciones), persona central con hermanos y parejas, descendientes abajo (hasta 5). Arrastrar, rueda/pellizco para zoom, "ver todo" e "inicio". |
 | **Fichas** | Nombre, apellidos, sexo, nacimiento y defunción (fecha + lugar), ocupación, foto, notas e historia. |
 | **Añadir familiares** | Padre, madre, pareja, hijo/a y hermano/a, desde la ficha o pulsando los huecos "+ Añadir padre/madre". Permite vincular a alguien que **ya está** en el árbol (para unir ramas sin duplicados). |
 | **Apellidos sugeridos** | Al añadir un hijo propone *primer apellido del padre + primer apellido de la madre* (costumbre hispana). |
 | **Fechas genealógicas** | Acepta `12/03/1950`, `1950`, `marzo 1950`, `c. 1900`, `antes de 1880`, `entre 1900 y 1910`… y las guarda en formato GEDCOM. |
 | **Calculadora de parentesco** | "¿Qué es X de Y?": padre, bisabuelo, tío abuelo, primo segundo, medio hermano, suegro, cuñado… con el camino familiar y el ancestro común. |
 | **GEDCOM** | Importa y exporta GEDCOM 5.5.1, el estándar de **MyHeritage, Ancestry, FamilySearch, Geni, Gramps**. Puedes traer tu árbol de MyHeritage y llevártelo de vuelta. |
+| **Compartir con privacidad** | Exportación GEDCOM que muestra a las personas vivas como «Privado» (sin nombre, fechas, lugares ni fotos). |
 | **Copia de seguridad** | Exporta/restaura JSON (incluye las fotos). |
 | **Estadísticas** | Personas, familias, generaciones, apellidos y lugares más frecuentes, nacimientos por siglo, esperanza de vida media. |
 | **Otros** | Búsqueda, lista de personas filtrable, impresión/PDF, modo oscuro, funciona sin conexión (PWA). |
@@ -70,6 +72,8 @@ js/gedcom.js          Importación / exportación GEDCOM 5.5.1
 js/relationship.js    Calculadora de parentesco en español
 js/dates.js           Fechas genealógicas (entrada en español ↔ GEDCOM)
 js/sample.js          Árbol de ejemplo con personas ficticias
+js/onboarding.js      Primeros pasos: elección inicial, introducción y asistente guiado
+js/avatars.js         Siluetas de avatar para personas sin foto
 js/app.js             Interfaz: renderizado SVG, paneles, formularios, persistencia
 sw.js                 Service worker (uso sin conexión)
 tests/                Tests con node:test (modelo, fechas, GEDCOM, parentesco, solapes del dibujo)

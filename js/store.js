@@ -34,6 +34,7 @@ export class FamilyTree {
     this.people = {};
     this.families = {};
     this.rootId = null;
+    this.name = '';
     this.listeners = new Set();
     if (data) this.load(data);
   }
@@ -52,11 +53,12 @@ export class FamilyTree {
       };
     }
     this.rootId = this.people[data.rootId] ? data.rootId : Object.keys(this.people)[0] || null;
+    this.name = typeof data.name === 'string' ? data.name : '';
     this.cleanup();
   }
 
   toJSON() {
-    return { version: 1, rootId: this.rootId, people: this.people, families: this.families };
+    return { version: 1, name: this.name, rootId: this.rootId, people: this.people, families: this.families };
   }
 
   onChange(fn) {
@@ -271,10 +273,31 @@ export class FamilyTree {
     }
   }
 
+  /** Nombre visible del árbol: el elegido o "Familia <primer apellido> <segundo>" de la persona de inicio. */
+  displayName() {
+    if (this.name) return this.name;
+    const root = this.get(this.rootId);
+    return root?.surname ? `Familia ${root.surname}` : 'Mi árbol';
+  }
+
+  rename(name) {
+    this.name = (name || '').trim();
+    this.changed();
+  }
+
+  /** Viva = no consta fallecimiento y no nació hace más de 100 años. */
+  isLiving(id) {
+    const p = this.people[id];
+    if (!p || p.deceased) return false;
+    const y = yearOf(p.birth.date);
+    return !y || y > new Date().getFullYear() - 100;
+  }
+
   clear() {
     this.people = {};
     this.families = {};
     this.rootId = null;
+    this.name = '';
     this.changed();
   }
 
