@@ -49,6 +49,7 @@
           <hr />
           <button data-action="rename"><svg><use href="#i-edit" /></svg>Cambiar nombre del árbol</button>
           <button data-action="sample"><svg><use href="#i-tree" /></svg>Cargar árbol de ejemplo</button>
+          <button data-action="poster"><svg><use href="#i-download" /></svg>Descargar póster del árbol (imagen)</button>
           <button data-action="print"><svg><use href="#i-print" /></svg>Imprimir / PDF</button>
           <button data-action="clear" class="danger"><svg><use href="#i-trash" /></svg>Borrar todo el árbol</button>
         </div>
@@ -68,10 +69,15 @@
       </svg>
 
       <div class="tree-toolbar">
-        <label>Arriba
+        <div class="mode-switch" role="group" aria-label="Estilo del árbol">
+          <button data-mode="art" aria-pressed="true">Ilustrado</button>
+          <button data-mode="diagram" aria-pressed="false">Diagrama</button>
+        </div>
+        <button class="btn small art-only" id="poster-btn"><svg><use href="#i-download" /></svg>Póster</button>
+        <label class="diagram-only">Arriba
           <select id="depth-up"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select>
         </label>
-        <label>Abajo
+        <label class="diagram-only">Abajo
           <select id="depth-down"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
         </label>
       </div>

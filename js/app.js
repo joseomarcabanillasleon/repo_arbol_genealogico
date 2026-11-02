@@ -4,7 +4,8 @@ import { importGedcom, exportGedcom } from './gedcom.js';
 import { relationship } from './relationship.js';
 import { formatDate, normalizeDate, yearOf } from './dates.js';
 import { buildSample } from './sample.js';
-import { silhouetteSVG, silhouetteInner } from './avatars.js';
+import { silhouetteSVG, silhouetteInner, silhouetteInline } from './avatars.js';
+import { illustratedLayout, renderIllustrated } from './illustrated.js';
 import { createOnboarding } from './onboarding.js';
 
 const STORAGE_KEY = 'raices.tree.v1';
@@ -17,9 +18,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // ---------------- estado ----------------
 const tree = new FamilyTree(loadJSON(STORAGE_KEY));
-const prefs = Object.assign({ up: 3, down: 2, focus: null, view: 'tree' }, loadJSON(PREFS_KEY) || {});
+const prefs = Object.assign({ up: 3, down: 2, focus: null, view: 'tree', mode: 'art', artBase: null }, loadJSON(PREFS_KEY) || {});
 const state = {
   focus: tree.get(prefs.focus) ? prefs.focus : tree.rootId,
+  artBase: tree.get(prefs.artBase) ? prefs.artBase : tree.rootId,
   view: 'tree',
   panelOpen: false,
   t: { k: 1, x: 0, y: 0 },
@@ -39,6 +41,7 @@ tree.onChange(() => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 250);
   if (!tree.get(state.focus)) state.focus = tree.rootId;
+  if (!tree.get(state.artBase)) state.artBase = tree.rootId;
   renderAll();
 });
 
@@ -52,7 +55,7 @@ function save() {
 
 function savePrefs() {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ up: prefs.up, down: prefs.down, focus: state.focus }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ up: prefs.up, down: prefs.down, focus: state.focus, mode: prefs.mode, artBase: state.artBase }));
   } catch { /* sin almacenamiento */ }
 }
 
@@ -104,10 +107,17 @@ function focusPerson(id, { openPanel = true, animate = true } = {}) {
   if (!tree.get(id)) return;
   state.focus = id;
   if (openPanel) state.panelOpen = true;
+  let center = true;
+  if (prefs.mode === 'art') {
+    // en el árbol ilustrado solo cambia la base si la persona no aparece en él
+    const visible = lastLayout?.art && lastLayout.nodes.some((n) => n.id === id && n.kind === 'person');
+    if (!visible) state.artBase = id;
+    center = !visible;
+  }
   savePrefs();
   if (state.view !== 'tree') setView('tree');
   renderPanel(); // primero el panel: su tamaño cuenta para centrar
-  renderTree({ center: true, animate });
+  renderTree({ center, animate });
 }
 
 function renderAll() {
@@ -141,7 +151,9 @@ function clip(text, max) {
 
 function renderTree({ center = false, animate = false } = {}) {
   viewport.replaceChildren();
+  syncModeUI();
   if (!tree.size) return;
+  if (prefs.mode === 'art') return renderArt({ center, animate });
   if (!tree.get(state.focus)) state.focus = tree.rootId;
   const layout = computeLayout(tree, state.focus, { up: prefs.up, down: prefs.down });
   lastLayout = layout;
@@ -200,6 +212,36 @@ function renderTree({ center = false, animate = false } = {}) {
   else applyTransform();
 }
 
+function renderArt({ center, animate }) {
+  if (!tree.get(state.artBase)) state.artBase = tree.rootId;
+  const layout = illustratedLayout(tree, state.artBase);
+  const res = renderIllustrated(viewport, layout, {
+    el,
+    tree,
+    silhouette: silhouetteInline,
+    title: tree.displayName(),
+    selectedId: state.panelOpen ? state.focus : null,
+  });
+  lastLayout = { art: true, nodes: layout.nodes, bounds: res.bounds };
+  if (center) fitAll(animate);
+  else applyTransform();
+}
+
+function syncModeUI() {
+  const art = prefs.mode === 'art';
+  $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === prefs.mode)));
+  $$('.diagram-only').forEach((n) => (n.hidden = art));
+  $$('.art-only').forEach((n) => (n.hidden = !art));
+  $('#tree-svg').classList.toggle('art', art);
+}
+
+function setMode(mode) {
+  prefs.mode = mode;
+  savePrefs();
+  renderTree({ center: true, animate: false });
+  renderPanel();
+}
+
 function applyTransform(animate = false) {
   viewport.classList.toggle('animate', animate);
   viewport.style.transform = `translate(${state.t.x}px, ${state.t.y}px) scale(${state.t.k})`;
@@ -221,6 +263,7 @@ function visibleArea() {
 
 function centerOnFocus(animate = false) {
   if (!lastLayout) return;
+  if (lastLayout.art) return fitAll(animate);
   const n = lastLayout.nodes.find((x) => x.id === state.focus && x.focus);
   if (!n) return;
   const { w, h } = visibleArea();
@@ -230,13 +273,14 @@ function centerOnFocus(animate = false) {
   applyTransform(animate);
 }
 
-function fitAll() {
+function fitAll(animate = true) {
   if (!lastLayout) return;
   const b = lastLayout.bounds;
   const { w, h } = visibleArea();
-  const k = Math.min(1, Math.max(0.15, Math.min((w - 40) / b.w, (h - 120) / b.h)));
-  state.t = { k, x: (w - b.w * k) / 2 - b.x * k, y: (h - b.h * k) / 2 - b.y * k + 20 };
-  applyTransform(true);
+  const pad = lastLayout.art ? 24 : 40;
+  const k = Math.min(1, Math.max(0.15, Math.min((w - pad) / b.w, (h - (lastLayout.art ? 70 : 120)) / b.h)));
+  state.t = { k, x: (w - b.w * k) / 2 - b.x * k, y: (h - b.h * k) / 2 - b.y * k + (lastLayout.art ? 26 : 20) };
+  applyTransform(animate !== false);
 }
 
 function zoomAt(factor, cx, cy) {
@@ -339,6 +383,14 @@ function handleTreeTap(target) {
   const card = target.closest?.('[data-id]');
   if (!card) return;
   const id = card.dataset.id;
+  if (prefs.mode === 'art') {
+    state.focus = id;
+    state.panelOpen = true;
+    savePrefs();
+    renderPanel();
+    renderTree();
+    return;
+  }
   if (id === state.focus) {
     state.panelOpen = true;
     renderPanel();
@@ -349,8 +401,14 @@ function handleTreeTap(target) {
 
 $('#zoom-in').addEventListener('click', () => { const { w, h } = visibleArea(); zoomAt(1.25, w / 2, h / 2); });
 $('#zoom-out').addEventListener('click', () => { const { w, h } = visibleArea(); zoomAt(0.8, w / 2, h / 2); });
-$('#zoom-fit').addEventListener('click', fitAll);
-$('#zoom-home').addEventListener('click', () => tree.rootId && focusPerson(tree.rootId));
+$('#zoom-fit').addEventListener('click', () => fitAll());
+$('#zoom-home').addEventListener('click', () => {
+  if (!tree.rootId) return;
+  state.artBase = tree.rootId;
+  focusPerson(tree.rootId, { openPanel: false });
+});
+$$('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+$('#poster-btn').addEventListener('click', () => exportPoster());
 $('#brand').addEventListener('click', (e) => {
   e.preventDefault();
   if (tree.rootId) focusPerson(tree.rootId, { openPanel: false });
@@ -406,6 +464,7 @@ function renderPanel() {
     <div class="p-actions">
       <button class="btn small primary" data-action="edit"><svg><use href="#i-edit"/></svg>Editar</button>
       <button class="btn small" data-action="add-menu"><svg><use href="#i-plus"/></svg>Añadir familiar</button>
+      ${prefs.mode === 'art' && p.id !== state.artBase ? '<button class="btn small ghost" data-action="art-base"><svg><use href="#i-tree"/></svg>Ver su árbol</button>' : ''}
       ${isRoot ? '' : '<button class="btn small ghost" data-action="set-root"><svg><use href="#i-home"/></svg>Hacer inicio</button>'}
     </div>
     <div class="p-section">
@@ -444,6 +503,11 @@ $('#panel').addEventListener('click', (e) => {
   switch (act.dataset.action) {
     case 'edit': return openPersonForm({ mode: 'edit', anchor: p.id });
     case 'add-menu': return openAddMenu(p.id);
+    case 'art-base':
+      state.artBase = p.id;
+      savePrefs();
+      renderPanel();
+      return renderTree({ center: true, animate: true });
     case 'set-root': tree.setRoot(p.id); toast(`${fullName(p)} es ahora la persona de inicio`); return;
     case 'unlink-parents':
       return confirmDialog('Desvincular de sus padres', `Se quitará el vínculo entre ${fullName(p)} y sus padres. No se borra a nadie.`, 'Desvincular', () => tree.unlinkParents(p.id));
@@ -455,7 +519,11 @@ $('#panel').addEventListener('click', (e) => {
       }, true);
   }
 });
-$('#panel-close').addEventListener('click', () => { state.panelOpen = false; renderPanel(); });
+$('#panel-close').addEventListener('click', () => {
+  state.panelOpen = false;
+  renderPanel();
+  if (prefs.mode === 'art') renderTree(); // quita el resaltado
+});
 $('#panel-handle').addEventListener('click', () => $('#panel').classList.toggle('expanded'));
 
 // ---------------- modales ----------------
@@ -934,12 +1002,15 @@ function runAction(action) {
         const s = buildSample();
         tree.load(s.data);
         state.focus = s.rootId;
+        state.artBase = s.rootId;
         tree.setRoot(s.rootId); // notifica el cambio: guarda y repinta
         state.panelOpen = false;
         setView('tree');
         renderTree({ center: true });
         setTimeout(fitAll, 50);
       });
+    case 'poster':
+      return exportPoster();
     case 'print':
       setView('tree');
       fitAll();
@@ -978,6 +1049,7 @@ $('#file-ged').addEventListener('change', async (e) => {
     replaceTree('Importar GEDCOM', () => {
       tree.load(result);
       state.focus = tree.rootId;
+      state.artBase = tree.rootId;
       tree.changed();
       state.panelOpen = false;
       setView('tree');
@@ -999,6 +1071,7 @@ $('#file-json').addEventListener('change', async (e) => {
     replaceTree('Restaurar copia', () => {
       tree.load(data);
       state.focus = tree.rootId;
+      state.artBase = tree.rootId;
       tree.changed();
       setView('tree');
       renderTree({ center: true });
@@ -1011,6 +1084,61 @@ $('#file-json').addEventListener('change', async (e) => {
 
 $$('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
 
+// ---------------- póster (PNG) del árbol ilustrado ----------------
+async function fontDataURL() {
+  try {
+    const buf = new Uint8Array(await (await fetch('fonts/patrick-hand-latin.woff2')).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return `data:font/woff2;base64,${btoa(bin)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function exportPoster() {
+  if (!tree.size) return toast('El árbol está vacío');
+  if (prefs.mode !== 'art') setMode('art');
+  if (state.view !== 'tree') setView('tree');
+  toast('Preparando el póster…');
+  const b = lastLayout.bounds;
+  const font = await fontDataURL();
+  const clone = viewport.cloneNode(true);
+  clone.removeAttribute('style');
+  clone.removeAttribute('id');
+  clone.removeAttribute('class');
+  const scale = Math.min(3, 4800 / Math.max(b.w, b.h));
+  const svgText = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.x} ${b.y} ${b.w} ${b.h}" width="${Math.round(b.w * scale)}" height="${Math.round(b.h * scale)}">`
+    + (font ? `<style>@font-face{font-family:'Patrick Hand';src:url(${font}) format('woff2');}</style>` : '')
+    + new XMLSerializer().serializeToString(clone) + '</svg>';
+  const name = `arbol-${normalize(tree.displayName()).replace(/[^a-z0-9]+/g, '-')}-${today()}`;
+  const svgBlob = new Blob([svgText], { type: 'image/svg+xml' });
+  try {
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    await new Promise((r) => setTimeout(r, 120)); // da tiempo a la fuente incrustada
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(b.w * scale);
+    canvas.height = Math.round(b.h * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    const png = await new Promise((res, rej) => canvas.toBlob((x) => (x ? res(x) : rej(new Error('png'))), 'image/png'));
+    const file = new File([png], `${name}.png`, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+      await navigator.share({ files: [file], title: tree.displayName() });
+    } else {
+      download(file.name, png, 'image/png');
+    }
+    toast('Póster listo para imprimir o compartir');
+  } catch (err) {
+    if (err?.name === 'AbortError') return;
+    download(`${name}.svg`, svgText, 'image/svg+xml');
+    toast('Se ha descargado el póster en formato SVG (algunas fotos de internet impiden crear el PNG).', 5000);
+  }
+}
+
 // ---------------- cabecera, bienvenida y primeros pasos ----------------
 const onboarding = createOnboarding({
   root: $('#onboarding'),
@@ -1019,6 +1147,7 @@ const onboarding = createOnboarding({
   onSample: () => runAction('sample'),
   onFinish: ({ rootId, name, count }) => {
     state.focus = rootId;
+    state.artBase = rootId;
     state.panelOpen = false;
     setView('tree');
     renderTree({ center: true });

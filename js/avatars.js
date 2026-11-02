@@ -16,3 +16,18 @@ export function silhouetteInner(sex) {
 export function silhouetteSVG(sex, cls = '') {
   return `<svg class="sil sex-${sex} ${cls}" viewBox="0 0 100 100" aria-hidden="true">${silhouetteInner(sex)}</svg>`;
 }
+
+// Colores fijos (sin CSS) para el árbol ilustrado y el póster exportado
+const INLINE = {
+  M: { bg: '#e3edf8', fg: '#9dbbe0', hair: '#4f6f96' },
+  F: { bg: '#f9e6ed', fg: '#e7a9bf', hair: '#8a4a62' },
+  U: { bg: '#eeeeea', fg: '#c3c3bc', hair: '#77776f' },
+};
+
+export function silhouetteInline(sex) {
+  const c = INLINE[sex] || INLINE.U;
+  return silhouetteInner(sex)
+    .replace('class="sil-bg"', `fill="${c.bg}"`)
+    .replaceAll('class="sil-fg"', `fill="${c.fg}"`)
+    .replace('class="sil-hair"', `fill="${c.hair}"`);
+}

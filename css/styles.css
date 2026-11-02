@@ -1,3 +1,16 @@
+@font-face {
+  font-family: 'Patrick Hand';
+  src: url('../fonts/patrick-hand-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Patrick Hand';
+  src: url('../fonts/patrick-hand-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF, U+2C60-2C7F, U+A720-A7FF;
+  font-display: swap;
+}
+
 :root {
   --brand: #2f6b4f;
   --brand-strong: #24563f;
@@ -176,6 +189,12 @@ main { position: fixed; inset: calc(var(--topbar-h) + env(safe-area-inset-top)) 
   border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); font-size: 13px; color: var(--muted);
 }
 .tree-toolbar label { display: flex; align-items: center; gap: 6px; }
+.tree-toolbar { align-items: center; flex-wrap: wrap; }
+.mode-switch { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+.mode-switch button { border: 0; background: none; padding: 5px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; color: var(--muted); }
+.mode-switch button[aria-pressed=true] { background: var(--surface); color: var(--brand-strong); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+.tree-toolbar .btn.small { min-height: 30px; padding: 4px 10px; font-size: 13px; }
+#tree-svg.art { background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--bg) 70%, #e9e1cf), var(--bg)); }
 .tree-toolbar select { border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); padding: 3px 6px; }
 .zoom-controls { position: absolute; left: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
 .zoom-controls .icon-btn { box-shadow: var(--shadow); }

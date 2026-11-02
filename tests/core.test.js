@@ -248,3 +248,21 @@ test('asistente: apellidos sugeridos, pasos visibles y creación', async () => {
   assert.equal(grandma.deceased, true);
   assert.equal(relationship(t, me, grandma.id).label, 'abuela');
 });
+
+test('árbol ilustrado: base con hermanos, padres en la bifurcación y huecos', async () => {
+  const { illustratedLayout, kinLabel } = await import('../js/illustrated.js');
+  const { t, ids } = sample();
+  const L = illustratedLayout(t, ids.daniel);
+  const base = L.nodes.filter((n) => n.g === 0).map((n) => t.get(n.id).givenName);
+  assert.deepEqual(base, ['Daniel', 'Sara']); // hermanos en el tronco, por edad
+  const parents = L.nodes.filter((n) => n.g === 1);
+  assert.deepEqual(parents.map((n) => t.get(n.id).givenName), ['Ricardo', 'Lucía']);
+  assert.ok(parents[0].x < 0 && parents[1].x > 0, 'padre a la izquierda, madre a la derecha');
+  assert.equal(L.shown, 3);
+  assert.equal(L.nodes.filter((n) => n.kind === 'ghost' && n.g === 3).length, 4); // bisabuelos que faltan
+  assert.equal(kinLabel(2, 'F'), 'Abuelita');
+  // una persona sola muestra huecos para padre y madre
+  const t2 = new FamilyTree();
+  const solo = t2.addPerson({ givenName: 'Aarón', sex: 'M' });
+  assert.deepEqual(illustratedLayout(t2, solo).nodes.filter((n) => n.kind === 'ghost').map((n) => n.sex), ['M', 'F']);
+});
