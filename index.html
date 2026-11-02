@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Raíces · Árbol genealógico</title>
+  <meta name="description" content="Crea, explora y comparte tu árbol genealógico. Importa y exporta GEDCOM." />
+  <meta name="theme-color" content="#2f6b4f" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Raíces" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" id="brand" aria-label="Raíces, ir a la persona de inicio">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><use href="#logo" /></svg>
+      <span>Raíces</span>
+    </a>
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab active" data-view="tree"><svg aria-hidden="true"><use href="#i-tree" /></svg><span>Árbol</span></button>
+      <button class="tab" data-view="people"><svg aria-hidden="true"><use href="#i-people" /></svg><span>Personas</span></button>
+      <button class="tab" data-view="relation"><svg aria-hidden="true"><use href="#i-link" /></svg><span>Parentesco</span></button>
+      <button class="tab" data-view="stats"><svg aria-hidden="true"><use href="#i-chart" /></svg><span>Estadísticas</span></button>
+    </nav>
+    <div class="top-actions">
+      <div class="search">
+        <svg aria-hidden="true"><use href="#i-search" /></svg>
+        <input id="search" type="search" placeholder="Buscar persona…" autocomplete="off" aria-label="Buscar persona" />
+        <div id="search-results" class="search-results" hidden></div>
+      </div>
+      <div class="menu-wrap">
+        <button id="menu-btn" class="icon-btn" aria-haspopup="true" aria-expanded="false" aria-label="Menú">
+          <svg aria-hidden="true"><use href="#i-dots" /></svg>
+        </button>
+        <div id="menu" class="menu" hidden>
+          <button data-action="import-ged"><svg><use href="#i-upload" /></svg>Importar GEDCOM…</button>
+          <button data-action="export-ged"><svg><use href="#i-download" /></svg>Exportar GEDCOM</button>
+          <hr />
+          <button data-action="export-json"><svg><use href="#i-download" /></svg>Copia de seguridad (con fotos)</button>
+          <button data-action="import-json"><svg><use href="#i-upload" /></svg>Restaurar copia…</button>
+          <hr />
+          <button data-action="sample"><svg><use href="#i-tree" /></svg>Cargar árbol de ejemplo</button>
+          <button data-action="print"><svg><use href="#i-print" /></svg>Imprimir / PDF</button>
+          <button data-action="clear" class="danger"><svg><use href="#i-trash" /></svg>Borrar todo el árbol</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ÁRBOL -->
+    <section id="view-tree" class="view active" aria-label="Árbol">
+      <svg id="tree-svg" role="img" aria-label="Árbol genealógico">
+        <defs>
+          <clipPath id="card-clip"><rect width="184" height="76" rx="14" /></clipPath>
+          <clipPath id="avatar-clip"><circle cx="36" cy="38" r="24" /></clipPath>
+        </defs>
+        <g id="viewport"></g>
+      </svg>
+
+      <div class="tree-toolbar">
+        <label>Arriba
+          <select id="depth-up"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select>
+        </label>
+        <label>Abajo
+          <select id="depth-down"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
+        </label>
+      </div>
+      <div class="zoom-controls">
+        <button class="icon-btn" id="zoom-in" aria-label="Acercar"><svg><use href="#i-plus" /></svg></button>
+        <button class="icon-btn" id="zoom-out" aria-label="Alejar"><svg><use href="#i-minus" /></svg></button>
+        <button class="icon-btn" id="zoom-fit" aria-label="Ver todo"><svg><use href="#i-fit" /></svg></button>
+        <button class="icon-btn" id="zoom-home" aria-label="Ir a la persona de inicio"><svg><use href="#i-home" /></svg></button>
+      </div>
+
+      <div id="empty" class="empty" hidden>
+        <svg class="empty-logo" viewBox="0 0 48 48" aria-hidden="true"><use href="#logo" /></svg>
+        <h1>Empieza tu árbol genealógico</h1>
+        <p>Añádete a ti mismo y ve completando padres, abuelos, hijos y hermanos. Todo se guarda en este dispositivo.</p>
+        <div class="empty-actions">
+          <button class="btn primary" data-action="first-person">Añadir la primera persona</button>
+          <button class="btn" data-action="import-ged">Importar GEDCOM (MyHeritage, Ancestry…)</button>
+          <button class="btn ghost" data-action="sample">Ver un árbol de ejemplo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PERSONAS -->
+    <section id="view-people" class="view page" aria-label="Personas">
+      <div class="page-head">
+        <h2>Personas <span id="people-count" class="muted"></span></h2>
+        <div class="page-tools">
+          <input id="people-filter" type="search" placeholder="Filtrar por nombre, lugar…" aria-label="Filtrar" />
+          <select id="people-sort" aria-label="Ordenar">
+            <option value="surname">Apellido</option>
+            <option value="given">Nombre</option>
+            <option value="birth">Nacimiento</option>
+          </select>
+          <button class="btn primary" data-action="add-unlinked">Añadir persona</button>
+        </div>
+      </div>
+      <div id="people-list" class="people-list"></div>
+    </section>
+
+    <!-- PARENTESCO -->
+    <section id="view-relation" class="view page" aria-label="Parentesco">
+      <div class="page-head"><h2>Calculadora de parentesco</h2></div>
+      <div class="relation-form card-box">
+        <label>Persona A <select id="rel-a"></select></label>
+        <button class="icon-btn" id="rel-swap" aria-label="Intercambiar"><svg><use href="#i-swap" /></svg></button>
+        <label>Persona B <select id="rel-b"></select></label>
+      </div>
+      <div id="rel-result" class="card-box rel-result"></div>
+    </section>
+
+    <!-- ESTADÍSTICAS -->
+    <section id="view-stats" class="view page" aria-label="Estadísticas">
+      <div class="page-head"><h2>Estadísticas del árbol</h2></div>
+      <div id="stats"></div>
+    </section>
+
+    <!-- PANEL DE PERSONA -->
+    <aside id="panel" class="panel" hidden aria-label="Ficha de la persona">
+      <button class="panel-handle" id="panel-handle" aria-label="Expandir o contraer ficha"></button>
+      <button class="icon-btn panel-close" id="panel-close" aria-label="Cerrar ficha"><svg><use href="#i-close" /></svg></button>
+      <div id="panel-body"></div>
+    </aside>
+  </main>
+
+  <dialog id="modal" class="modal">
+    <form method="dialog" id="modal-form" novalidate></form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <input type="file" id="file-ged" accept=".ged,.gedcom,.GED,text/plain" hidden />
+  <input type="file" id="file-json" accept=".json,application/json" hidden />
+
+  <!-- Iconos -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="logo" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="23" fill="var(--brand)" />
+      <path d="M24 38V24m0 4-6-5m6 2 7-6m-7 13c-3 0-5 1-6 2m6-2c3 0 5 1 6 2" stroke="#fff" stroke-width="2.6" stroke-linecap="round" fill="none" />
+      <circle cx="16" cy="18" r="4.5" fill="#fff" /><circle cx="24" cy="12" r="5" fill="#fff" /><circle cx="32" cy="17" r="4.5" fill="#fff" />
+    </symbol>
+    <symbol id="i-tree" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 3h6v5H9zM3 16h6v5H3zm12 0h6v5h-6zM12 8v4M6 16v-4h12v4" /></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1.5a4 4 0 0 0-3-3.9M15.5 4.1a3.5 3.5 0 0 1 0 6.8" /></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 20V10m6 10V4m6 16v-7m5 7H3" /></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m20 20-4.2-4.2M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" /></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8" fill="currentColor" /><circle cx="12" cy="12" r="1.8" fill="currentColor" /><circle cx="12" cy="19" r="1.8" fill="currentColor" /></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m-5 5 5-5 5 5M4 20h16" /></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m-5-5 5 5 5-5M4 20h16" /></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M7 9V3h10v6M7 18H4v-8h16v8h-3M7 14h10v7H7z" /></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14" /></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14" /></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5" /></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 11 12 4l8 7v9h-5v-6H9v6H4z" /></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="m6 6 12 12M18 6 6 18" /></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 4 3 8l4 4M3 8h14m0 12 4-4-4-4m4 4H7" /></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" /></symbol>
+  </svg>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
