@@ -27,7 +27,6 @@ export const FONT = "'Patrick Hand', 'Segoe Print', 'Comic Sans MS', cursive";
 
 const PHOTO = [112, 102, 88, 74]; // tamaño de foto por generación
 const ROW_Y = [0, -250, -470, -660]; // centro de la foto por generación
-const CANOPY_R = [0, 138, 104, 80];
 const BRANCH_W = [0, 40, 24, 14];
 const FORK_Y = -150;
 const GROUND_Y = 150;
@@ -83,7 +82,9 @@ export function illustratedLayout(tree, baseId, { maxGen = 3 } = {}) {
     slots[g].forEach((s, i) => {
       const x = (i + 0.5 - n / 2) * (width / n);
       s.x = x;
-      s.y = ROW_Y[g];
+      // la generación de arriba se curva en cúpula; las intermedias, un poco
+      const lift = g === shown ? 90 : g >= 2 ? 34 : 0;
+      s.y = ROW_Y[g] - lift * (1 - (x / (width / 2)) ** 2);
       s.g = g;
       s.i = i;
       if (s.id) nodes.push({ ...s, kind: 'person' });
@@ -159,43 +160,103 @@ export function renderIllustrated(root, layout, deps) {
   el('stop', { offset: '0.55', 'stop-color': ART.trunk }, grad);
   el('stop', { offset: '1', 'stop-color': ART.trunkDark }, grad);
 
-  // ---- copa: manchas por cada hueco de cada generación (simétrica aunque falten datos) ----
-  const blobs = [];
-  const addBlob = (x, y, r) => blobs.push({ x, y, r });
-  addBlob(0, ROW_Y[1] + 30, W * 0.2);
+  // ---- copa: cúpula redondeada de lóbulos irregulares (no sigue las filas) ----
+  let cMinX = 0;
+  let cMaxX = 0;
+  let cMinY = 0;
   for (let g = 1; g <= layout.shown; g++) {
-    for (const s of layout.slots[g]) {
-      const R = CANOPY_R[g];
-      addBlob(s.x, s.y - 8, R);
-      const sats = g === layout.shown ? 5 : 3;
-      for (let k = 0; k < sats; k++) {
-        const a = Math.PI * (1.05 + (k / Math.max(1, sats - 1)) * 0.9) + (rand() - 0.5) * 0.4; // sobre todo hacia arriba
-        addBlob(s.x + Math.cos(a) * R * 0.72, s.y - 8 + Math.sin(a) * R * 0.6, R * (0.55 + rand() * 0.15));
-      }
+    for (const sl of layout.slots[g]) {
+      const half = PHOTO[g] / 2 + 34;
+      cMinX = Math.min(cMinX, sl.x - half);
+      cMaxX = Math.max(cMaxX, sl.x + half);
+      cMinY = Math.min(cMinY, sl.y - PHOTO[g] / 2 - 16);
     }
   }
-  const canopy = el('g', {}, root);
-  const back = el('g', { fill: ART.leafDeep }, canopy);
-  const main = el('g', { fill: ART.leaf }, canopy);
-  const shade = el('g', { fill: 'url(#il-hatch)', opacity: 0.28 }, canopy);
-  const light = el('g', { fill: ART.leafLight, opacity: 0.85 }, canopy);
-  for (const b of blobs) {
-    el('path', { d: blobPath(b.x, b.y + 6, b.r * 1.07, rand) }, back);
-    const d = blobPath(b.x, b.y, b.r, rand);
-    el('path', { d }, main);
-    el('path', { d }, shade);
-    el('path', { d: blobPath(b.x - b.r * 0.18, b.y - b.r * 0.24, b.r * 0.5, rand, 0.22) }, light);
+  const crown = {
+    cx: 0,
+    rx: Math.max(-cMinX, cMaxX) + 62,
+    top: cMinY - 78,
+    bottom: ROW_Y[1] + 92,
+  };
+  crown.cy = (crown.top + crown.bottom) / 2;
+  crown.ry = (crown.bottom - crown.top) / 2;
+  const base = Math.min(crown.rx, crown.ry);
+
+  // lóbulos del borde (con forma de coliflor) y del interior
+  const edge = [];
+  const nEdge = Math.max(16, Math.round((Math.PI * (crown.rx + crown.ry)) / (base * 0.42)));
+  for (let k = 0; k < nEdge; k++) {
+    const a = (k / nEdge) * Math.PI * 2 + (rand() - 0.5) * 0.18;
+    const below = Math.sin(a) > 0.55; // parte baja, junto al tronco: lóbulos más pequeños
+    const r = base * (below ? 0.17 : 0.24) * (0.8 + rand() * 0.45);
+    edge.push({ x: crown.cx + Math.cos(a) * crown.rx * 0.86, y: crown.cy + Math.sin(a) * crown.ry * 0.86, r, a });
   }
-  // hojitas en el borde
+  const inner = [];
+  const nInner = Math.round(nEdge * 0.75);
+  for (let k = 0; k < nInner; k++) {
+    const a = rand() * Math.PI * 2;
+    const d = 0.25 + rand() * 0.45;
+    inner.push({ x: crown.cx + Math.cos(a) * crown.rx * d, y: crown.cy + Math.sin(a) * crown.ry * d, r: base * (0.16 + rand() * 0.1), a });
+  }
+  inner.sort((p, q) => p.y - q.y); // de arriba abajo: los de abajo tapan a los de arriba
+  const blobs = [...edge, ...inner];
+
+  // degradados de volumen: luz arriba a la izquierda, sombra abajo
+  const lightG = el('radialGradient', { id: 'il-crown-light', cx: 0.36, cy: 0.2, r: 0.55 }, defs);
+  el('stop', { offset: '0', 'stop-color': '#f4fbe6', 'stop-opacity': 0.32 }, lightG);
+  el('stop', { offset: '1', 'stop-color': '#f4fbe6', 'stop-opacity': 0 }, lightG);
+  const shadeG = el('linearGradient', { id: 'il-crown-shade', x1: 0, x2: 0, y1: 0, y2: 1 }, defs);
+  el('stop', { offset: '0.45', 'stop-color': '#2f5426', 'stop-opacity': 0 }, shadeG);
+  el('stop', { offset: '1', 'stop-color': '#2f5426', 'stop-opacity': 0.38 }, shadeG);
+
+  const coreD = blobPath(0, 0, 1, rand, 0.06, 14);
+  const coreT = `translate(${r1(crown.cx)},${r1(crown.cy)}) scale(${r1(crown.rx * 0.88)},${r1(crown.ry * 0.88)})`;
+  const clip = el('clipPath', { id: 'il-crown-clip' }, defs);
+  el('path', { d: coreD, transform: coreT }, clip);
+  const clipLobes = [];
+
+  const canopy = el('g', {}, root);
+  // sombra exterior de toda la copa
+  const back = el('g', { fill: ART.leafDeep }, canopy);
+  el('path', { d: coreD, transform: `translate(${r1(crown.cx + 6)},${r1(crown.cy + 12)}) scale(${r1(crown.rx * 0.9)},${r1(crown.ry * 0.9)})` }, back);
+  for (const b of edge) el('path', { d: blobPath(b.x + 5, b.y + 9, b.r * 1.06, rand) }, back);
+  // masa principal
+  const main = el('g', { fill: ART.leaf }, canopy);
+  el('path', { d: coreD, transform: coreT }, main);
+  for (const b of edge) {
+    const d = blobPath(b.x, b.y, b.r, rand);
+    clipLobes.push(d);
+    el('path', { d }, main);
+    el('path', { d, fill: 'url(#il-hatch)', opacity: 0.22 }, main);
+    if (Math.sin(b.a) < 0.25) el('path', { d: blobPath(b.x - b.r * 0.2, b.y - b.r * 0.28, b.r * 0.55, rand, 0.22), fill: ART.leafLight, opacity: 0.8 }, main);
+  }
+  // lóbulos interiores con su sombra propia, para dar relieve
+  for (const b of inner) {
+    el('path', { d: blobPath(b.x + 3, b.y + b.r * 0.22, b.r * 1.02, rand), fill: ART.leafDeep, opacity: 0.55 }, main);
+    const d = blobPath(b.x, b.y, b.r, rand);
+    el('path', { d, fill: ART.leaf }, main);
+    el('path', { d, fill: 'url(#il-hatch)', opacity: 0.2 }, main);
+    el('path', { d: blobPath(b.x - b.r * 0.2, b.y - b.r * 0.26, b.r * 0.5, rand, 0.22), fill: ART.leafLight, opacity: 0.7 }, main);
+  }
+  for (const d of clipLobes) el('path', { d }, clip);
+  // volumen global
+  const bx = crown.cx - crown.rx * 1.1;
+  const by = crown.top - 40;
+  const bw = crown.rx * 2.2;
+  const bh = crown.bottom - crown.top + 80;
+  el('rect', { x: r1(bx), y: r1(by), width: r1(bw), height: r1(bh), fill: 'url(#il-crown-shade)', 'clip-path': 'url(#il-crown-clip)' }, canopy);
+  el('rect', { x: r1(bx), y: r1(by), width: r1(bw), height: r1(bh), fill: 'url(#il-crown-light)', 'clip-path': 'url(#il-crown-clip)' }, canopy);
+  // hojitas que asoman por el borde, apuntando hacia fuera
   const leaves = el('g', {}, canopy);
-  for (const b of blobs) {
-    const n = Math.round(b.r / 30);
+  for (const b of edge) {
+    const n = 2 + Math.round(rand() * 2);
     for (let k = 0; k < n; k++) {
-      const a = rand() * Math.PI * 2;
-      const x = b.x + Math.cos(a) * b.r * 1.02;
-      const y = b.y + Math.sin(a) * b.r * 1.02;
-      const deg = (a * 180) / Math.PI + (rand() - 0.5) * 40;
-      el('path', { d: LEAF, transform: `translate(${r1(x)},${r1(y)}) rotate(${r1(deg)}) scale(${r1(0.8 + rand() * 0.6)})`, fill: rand() > 0.5 ? ART.leafDeep : ART.leafLight }, leaves);
+      const a = b.a + (rand() - 0.5) * 1.6;
+      const x = b.x + Math.cos(a) * b.r * 0.98;
+      const y = b.y + Math.sin(a) * b.r * 0.98;
+      const deg = (a * 180) / Math.PI + (rand() - 0.5) * 30;
+      const upper = Math.sin(a) < 0.3;
+      el('path', { d: LEAF, transform: `translate(${r1(x)},${r1(y)}) rotate(${r1(deg)}) scale(${r1(0.75 + rand() * 0.55)})`, fill: upper && rand() > 0.4 ? ART.leafLight : ART.leafDeep }, leaves);
     }
   }
 
@@ -306,8 +367,8 @@ export function renderIllustrated(root, layout, deps) {
   }
 
   // ---- hoja de papel y título ----
-  const xs = blobs.map((b) => [b.x - b.r * 1.15, b.x + b.r * 1.15]).flat().concat([-groundRx, groundRx]);
-  const ys = blobs.map((b) => b.y - b.r * 1.15);
+  const xs = blobs.map((b) => [b.x - b.r * 1.3, b.x + b.r * 1.3]).flat().concat([-groundRx, groundRx]);
+  const ys = blobs.map((b) => b.y - b.r * 1.3);
   const minX = Math.min(...xs) - 50;
   const maxX = Math.max(...xs) + 50;
   const top = Math.min(...ys) - 110;
