@@ -7,6 +7,7 @@ import { buildSample } from './sample.js';
 import { silhouetteSVG, silhouetteInner, silhouetteInline } from './avatars.js';
 import { illustratedLayout, renderIllustrated } from './illustrated.js';
 import { createOnboarding } from './onboarding.js';
+import { questions, completeness, upcoming, consistency, familySearchURL } from './insights.js';
 
 const STORAGE_KEY = 'raices.tree.v1';
 const PREFS_KEY = 'raices.prefs.v1';
@@ -24,6 +25,7 @@ const state = {
   artBase: tree.get(prefs.artBase) ? prefs.artBase : tree.rootId,
   view: 'tree',
   panelOpen: false,
+  qSkip: new Set(), // preguntas saltadas en esta sesión ("Ahora no")
   t: { k: 1, x: 0, y: 0 },
 };
 
@@ -96,11 +98,13 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 // ---------------- navegación ----------------
 function setView(view) {
+  const from = state.view;
   state.view = view;
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
   $('#panel').hidden = !(view === 'tree' && state.panelOpen && tree.get(state.focus));
   renderView();
+  if (view === 'tree' && from !== 'tree') centerOnFocus(false); // al volver al árbol, encuadrarlo
 }
 
 function focusPerson(id, { openPanel = true, animate = true } = {}) {
@@ -131,7 +135,118 @@ function renderView() {
   if (state.view === 'people') renderPeople();
   if (state.view === 'relation') renderRelation();
   if (state.view === 'stats') renderStats();
+  if (state.view === 'home') renderHome();
 }
+
+// ---------------- inicio ----------------
+function personAvatar(p, cls) {
+  return p.photo ? `<img class="${cls}" src="${esc(p.photo)}" alt="" />` : silhouetteSVG(p.sex, cls);
+}
+
+function renderHome() {
+  const me = tree.get(tree.rootId);
+  if (!me) return;
+  $('#home-hello').textContent = `Hola, ${me.givenName.split(/\s+/)[0] || 'de nuevo'}`;
+  $('#home-sub').textContent = `${tree.displayName()} · ${tree.size} ${tree.size === 1 ? 'persona' : 'personas'}`;
+
+  // anillo de completitud
+  const c = completeness(tree, tree.rootId);
+  const R = 30;
+  const L = 2 * Math.PI * R;
+  $('#home-ring').innerHTML = `
+    <svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" class="ring-bg"/><circle cx="40" cy="40" r="${R}" class="ring-fg" stroke-dasharray="${(L * c.pct) / 100} ${L}" transform="rotate(-90 40 40)"/><text x="40" y="46" text-anchor="middle">${c.pct}%</text></svg>
+    <span><strong>${c.known} de ${c.total}</strong> antepasados directos hasta tus bisabuelos</span>`;
+  $('#home-ring').title = c.byGen.map((g) => `${['Tú', 'Padres', 'Abuelos', 'Bisabuelos'][g.gen]}: ${g.known}/${g.total}`).join(' · ');
+
+  // pregunta
+  const qs = questions(tree, tree.rootId, tree.dismissed).filter((q) => !state.qSkip.has(q.id));
+  const box = $('#home-question');
+  if (!qs.length) {
+    box.innerHTML = `<div class="q-done"><strong>¡Buen trabajo!</strong><span class="muted">No hay más preguntas por ahora. Puedes seguir añadiendo familia desde el árbol.</span></div>`;
+  } else {
+    const q = qs[0];
+    const subj = tree.get(q.subjectId);
+    box.innerHTML = `
+      <div class="q-top">${personAvatar(subj, 'q-av')}<span class="muted">${qs.length === 1 ? 'Última pregunta' : `Quedan ${qs.length} preguntas`}</span></div>
+      <p class="q-text">${esc(q.text)}</p>
+      <div class="q-actions">
+        <button class="btn q-no" data-q="no">No</button>
+        <button class="btn primary q-yes" data-q="yes">Sí</button>
+      </div>
+      <button class="ob-link" data-q="skip">Ahora no</button>`;
+    box.dataset.qid = q.id;
+  }
+
+  // próximas fechas
+  const ups = upcoming(tree, new Date(), 45).slice(0, 6);
+  const when = (n) => (n === 0 ? 'hoy' : n === 1 ? 'mañana' : `en ${n} días`);
+  const fmt = (d) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+  $('#home-dates').innerHTML = ups.length
+    ? ups.map((u) => {
+      const ps = u.personIds.map((id) => tree.get(id));
+      const names = ps.map((p) => p.givenName.split(/\s+/)[0]).join(' y ');
+      const text = {
+        birthday: `Cumpleaños de ${names} · cumple ${u.years}`,
+        'birth-memory': `${u.years} años del nacimiento de ${names}`,
+        death: `${u.years} años del fallecimiento de ${names}`,
+        wedding: `Aniversario de ${names} · ${u.years} años`,
+      }[u.kind];
+      const icon = { birthday: '🎂', 'birth-memory': '🌱', death: '🕯️', wedding: '💍' }[u.kind];
+      return `<button class="hl-row${u.inDays === 0 ? ' today' : ''}" data-goto="${ps[0].id}"><span class="hl-ico">${icon}</span><span><strong>${esc(text)}</strong><small>${fmt(u.date)} · ${when(u.inDays)}</small></span></button>`;
+    }).join('')
+    : '<p class="muted hl-empty">No hay fechas en los próximos 45 días. Añade fechas completas (día, mes y año) para ver aquí cumpleaños y aniversarios.</p>';
+
+  // revisión de datos
+  const issues = consistency(tree);
+  $('#home-issues-wrap').hidden = !issues.length;
+  $('#home-issues').innerHTML = issues.slice(0, 8).map((i) => `<button class="hl-row" data-goto="${i.personId}"><span class="hl-ico">⚠️</span><span>${esc(i.text)}</span></button>`).join('');
+}
+
+$('#home-question').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-q]');
+  if (!b) return;
+  const qid = $('#home-question').dataset.qid;
+  const q = questions(tree, tree.rootId, tree.dismissed).find((x) => x.id === qid);
+  if (!q) return;
+  if (b.dataset.q === 'no') return tree.dismiss(q.id);
+  if (b.dataset.q === 'skip') {
+    state.qSkip.add(q.id);
+    return renderHome();
+  }
+  openPersonForm({ mode: q.yes.mode, anchor: q.yes.anchor, sex: q.yes.sex });
+});
+
+$('#view-home').addEventListener('click', (e) => {
+  const go = e.target.closest('#home-dates [data-goto], #home-issues [data-goto]');
+  if (go) return focusPerson(go.dataset.goto);
+  if (e.target.closest('#home-ring')) return setView('tree');
+  const quick = e.target.closest('[data-quick]');
+  if (!quick) return;
+  switch (quick.dataset.quick) {
+    case 'add': return openAddMenu(tree.rootId);
+    case 'photo': {
+      const close = [tree.rootId, ...tree.parents(tree.rootId), ...tree.spouses(tree.rootId), ...tree.children(tree.rootId), ...tree.siblings(tree.rootId)];
+      const target = close.find((id) => !tree.get(id).photo) || tree.all().find((p) => !p.photo)?.id;
+      if (!target) return toast('¡Todos tienen foto!');
+      toast(`Añade la foto de ${fullName(tree.get(target))}`);
+      return openPersonForm({ mode: 'edit', anchor: target });
+    }
+    case 'search':
+      if (window.innerWidth <= 820) document.body.classList.add('search-open');
+      return $('#search').focus();
+    case 'tree': return setView('tree');
+    case 'poster': return exportPoster();
+    case 'relation': return setView('relation');
+  }
+});
+
+$('#home-records').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const y = String(fd.get('y') || '').trim();
+  const url = familySearchURL({ givenName: String(fd.get('g') || '').trim(), surname: String(fd.get('s') || '').trim(), birth: { date: /^\d{3,4}$/.test(y) ? y : '', place: '' } });
+  window.open(url, '_blank', 'noopener');
+});
 
 // ---------------- árbol (SVG) ----------------
 const svg = $('#tree-svg');
@@ -464,6 +579,7 @@ function renderPanel() {
     <div class="p-actions">
       <button class="btn small primary" data-action="edit"><svg><use href="#i-edit"/></svg>Editar</button>
       <button class="btn small" data-action="add-menu"><svg><use href="#i-plus"/></svg>Añadir familiar</button>
+      <a class="btn small ghost" href="${esc(familySearchURL(p))}" target="_blank" rel="noopener"><svg><use href="#i-search"/></svg>Buscar registros</a>
       ${prefs.mode === 'art' && p.id !== state.artBase ? '<button class="btn small ghost" data-action="art-base"><svg><use href="#i-tree"/></svg>Ver su árbol</button>' : ''}
       ${isRoot ? '' : '<button class="btn small ghost" data-action="set-root"><svg><use href="#i-home"/></svg>Hacer inicio</button>'}
     </div>
@@ -1189,8 +1305,7 @@ $('#search-toggle').addEventListener('click', () => {
 $('#search').addEventListener('blur', () => setTimeout(() => !$('#search').value && document.body.classList.remove('search-open'), 200));
 
 // ---------------- arranque ----------------
-setView('tree');
-if (tree.size) renderTree({ center: true });
+setView(tree.size ? 'home' : 'tree');
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
