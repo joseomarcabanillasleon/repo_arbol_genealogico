@@ -23,6 +23,7 @@
       <small id="tree-count"></small>
     </button>
     <nav class="tabs" aria-label="Secciones">
+      <button class="tab" data-view="home"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Inicio</span></button>
       <button class="tab active" data-view="tree"><svg aria-hidden="true"><use href="#i-tree" /></svg><span>Árbol</span></button>
       <button class="tab" data-view="people"><svg aria-hidden="true"><use href="#i-people" /></svg><span>Personas</span></button>
       <button class="tab" data-view="relation"><svg aria-hidden="true"><use href="#i-link" /></svg><span>Parentesco</span></button>
@@ -97,6 +98,49 @@
     </section>
 
     <!-- PERSONAS -->
+    <!-- INICIO -->
+    <section id="view-home" class="view page home" aria-label="Inicio">
+      <div class="home-hero">
+        <div>
+          <h2 id="home-hello">Hola</h2>
+          <p id="home-sub" class="muted"></p>
+        </div>
+        <button class="ring" id="home-ring" aria-label="Completitud del árbol"></button>
+      </div>
+
+      <h3 class="home-h">Completa tu árbol</h3>
+      <div id="home-question" class="card-box q-card"></div>
+
+      <h3 class="home-h">Accesos rápidos</h3>
+      <div class="quick">
+        <button data-quick="add"><span class="qi qi-green"><svg><use href="#i-plus" /></svg></span>Añadir familiar</button>
+        <button data-quick="photo"><span class="qi qi-pink"><svg><use href="#i-camera" /></svg></span>Añadir foto</button>
+        <button data-quick="search"><span class="qi qi-blue"><svg><use href="#i-search" /></svg></span>Buscar en el árbol</button>
+        <button data-quick="tree"><span class="qi qi-green"><svg><use href="#i-tree" /></svg></span>Ver mi árbol</button>
+        <button data-quick="poster"><span class="qi qi-amber"><svg><use href="#i-download" /></svg></span>Póster para imprimir</button>
+        <button data-quick="relation"><span class="qi qi-blue"><svg><use href="#i-link" /></svg></span>¿Qué parentesco tenemos?</button>
+      </div>
+
+      <h3 class="home-h">Próximas fechas en la familia</h3>
+      <div id="home-dates" class="card-box home-list"></div>
+
+      <div id="home-issues-wrap">
+        <h3 class="home-h">Datos a revisar</h3>
+        <div id="home-issues" class="card-box home-list"></div>
+      </div>
+
+      <h3 class="home-h">Buscar en registros históricos</h3>
+      <form id="home-records" class="card-box records" novalidate>
+        <p class="muted">Busca actas de nacimiento, bautismo, matrimonio o defunción en <strong>FamilySearch</strong>, un archivo genealógico gratuito (necesita una cuenta gratuita). Se abre en otra pestaña.</p>
+        <div class="row3">
+          <label class="field"><span>Nombre(s)</span><input type="text" name="g" autocomplete="off" /></label>
+          <label class="field"><span>Apellidos</span><input type="text" name="s" autocomplete="off" /></label>
+          <label class="field"><span>Año de nacimiento</span><input type="text" name="y" inputmode="numeric" placeholder="1946" /></label>
+        </div>
+        <button class="btn primary" type="submit">Buscar en FamilySearch</button>
+      </form>
+    </section>
+
     <section id="view-people" class="view page" aria-label="Personas">
       <div class="page-head">
         <h2>Personas <span id="people-count" class="muted"></span></h2>
@@ -173,6 +217,7 @@
     <symbol id="i-close" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="m6 6 12 12M18 6 6 18" /></symbol>
     <symbol id="i-swap" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 4 3 8l4 4M3 8h14m0 12 4-4-4-4m4 4H7" /></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2" /></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" /></symbol>
   </svg>
 

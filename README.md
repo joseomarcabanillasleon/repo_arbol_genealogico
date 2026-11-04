@@ -8,7 +8,8 @@ Funciona en el navegador del ordenador y del móvil, y se puede instalar en el i
 
 | Área | Qué hace |
 |---|---|
-| **Árbol ilustrado** (vista principal) | Inspirado en un póster hecho a mano en casa: la persona y sus hermanos en el tronco, Papá y Mamá en la bifurcación, Abuelitos y Bisabuelos en la copa. Fotos tipo polaroid con etiquetas manuscritas y huecos «¿Abuelita?» para completar. Se dibuja por código, así que se adapta a cualquier familia. |
+| **Inicio** | Saludo y anillo de completitud (antepasados directos conocidos hasta bisabuelos). Preguntas de una en una generadas de los huecos reales del árbol (pareja, hijos, padres, abuelos, fechas, fotos, lugares) con Sí / No / Ahora no; el "No" se recuerda. Accesos rápidos, próximos cumpleaños y aniversarios, revisión de datos incoherentes y búsqueda gratuita en FamilySearch. |
+| **Árbol ilustrado** | Inspirado en un póster hecho a mano en casa: la persona y sus hermanos en el tronco, Papá y Mamá en la bifurcación, Abuelitos y Bisabuelos en la copa. Fotos tipo polaroid con etiquetas manuscritas y huecos «¿Abuelita?» para completar. Se dibuja por código, así que se adapta a cualquier familia. |
 | **Póster para imprimir** | Descarga el árbol ilustrado como imagen PNG de alta resolución (≈3500 px, apta para A3). En el iPhone se abre el menú de compartir para guardarlo o imprimirlo. |
 | **Primeros pasos guiados** | Pantalla "¿Cómo quieres empezar?" (crear, importar GEDCOM o ver ejemplo), introducción breve y asistente paso a paso: tú → madre → padre → abuelos, con apellidos sugeridos y casilla "Vive". Al terminar, mensaje de bienvenida. |
 | **Árbol interactivo** | Tarjetas verticales con foto o silueta y botón **+** para añadir familiares; huecos punteados para padres y abuelos que faltan. Vista "reloj de arena": antepasados arriba (hasta 6 generaciones), persona central con hermanos y parejas, descendientes abajo (hasta 5). Arrastrar, rueda/pellizco para zoom, "ver todo" e "inicio". |
@@ -76,6 +77,7 @@ js/dates.js           Fechas genealógicas (entrada en español ↔ GEDCOM)
 js/sample.js          Árbol de ejemplo con personas ficticias
 js/onboarding.js      Primeros pasos: elección inicial, introducción y asistente guiado
 js/avatars.js         Siluetas de avatar para personas sin foto
+js/insights.js        Lógica del Inicio: preguntas, completitud, aniversarios y revisión de datos
 js/illustrated.js     Árbol ilustrado (tronco, ramas, copa, polaroids) y su cálculo de posiciones
 fonts/                Fuente manuscrita Patrick Hand (licencia SIL OFL, incluida para uso sin conexión)
 js/app.js             Interfaz: renderizado SVG, paneles, formularios, persistencia

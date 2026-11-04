@@ -266,3 +266,61 @@ test('árbol ilustrado: base con hermanos, padres en la bifurcación y huecos', 
   const solo = t2.addPerson({ givenName: 'Aarón', sex: 'M' });
   assert.deepEqual(illustratedLayout(t2, solo).nodes.filter((n) => n.kind === 'ghost').map((n) => n.sex), ['M', 'F']);
 });
+
+test('inicio: preguntas según los huecos reales, y el "No" se recuerda', async () => {
+  const { questions } = await import('../js/insights.js');
+  const t = new FamilyTree();
+  const me = t.addPerson({ givenName: 'Daniel', surname: 'Herrera Soler', sex: 'M' });
+  let qs = questions(t, me, t.dismissed);
+  assert.equal(qs[0].text, '¿Tienes esposa o pareja?');
+  assert.deepEqual(qs.slice(0, 5).map((q) => q.yes.mode), ['partner', 'child', 'parent', 'parent', 'sibling']);
+  t.dismiss(qs[0].id);
+  qs = questions(t, me, new FamilyTree(t.toJSON()).dismissed);
+  assert.ok(!qs.some((q) => q.yes.mode === 'partner'), 'el "No" sobrevive al guardar');
+  // al añadir la madre aparece la pregunta por sus padres, con parentesco
+  const mom = t.addParent(me, { givenName: 'Lucía', surname: 'Soler', sex: 'F' });
+  qs = questions(t, me, t.dismissed);
+  assert.ok(qs.some((q) => q.text === '¿Sabes cómo se llamaba la madre de Lucía (tu madre)?'));
+  assert.ok(qs.some((q) => q.id === `birth:${mom}` && q.yes.mode === 'edit'));
+});
+
+test('inicio: completitud hasta bisabuelos', async () => {
+  const { completeness } = await import('../js/insights.js');
+  const { t, ids } = sample();
+  const c = completeness(t, ids.daniel);
+  // Daniel + 2 padres + 4 abuelos + 4 bisabuelos conocidos = 11 de 15
+  assert.equal(c.known, 11);
+  assert.equal(c.pct, 73);
+});
+
+test('inicio: próximos aniversarios', async () => {
+  const { upcoming } = await import('../js/insights.js');
+  const t = new FamilyTree();
+  const a = t.addPerson({ givenName: 'Ana', sex: 'F', birth: { date: '5 NOV 1990' } });
+  t.addPerson({ givenName: 'Abuelo', sex: 'M', birth: { date: '1 JAN 1920' }, deceased: true, death: { date: '10 NOV 2000' } });
+  t.addPartner(a, { givenName: 'Luis', sex: 'M' }, { date: '3 NOV 2015' });
+  const u = upcoming(t, new Date(2026, 10, 3), 30);
+  assert.deepEqual(u.map((x) => [x.kind, x.inDays, x.years]), [['wedding', 0, 11], ['birthday', 2, 36], ['death', 7, 26]]);
+});
+
+test('inicio: revisión de datos incoherentes', async () => {
+  const { consistency } = await import('../js/insights.js');
+  const t = new FamilyTree();
+  const kid = t.addPerson({ givenName: 'Hijo', birth: { date: '1950' } });
+  t.addParent(kid, { givenName: 'Madre', sex: 'F', birth: { date: '1945' } });
+  t.addPerson({ givenName: 'Viejo', birth: { date: '1890' } });
+  t.addPerson({ givenName: 'Raro', birth: { date: '1960' }, death: { date: '1950' } });
+  const texts = consistency(t, new Date(2026, 0, 1)).map((i) => i.text);
+  assert.ok(texts.some((x) => x.includes('tendría 5 años')));
+  assert.ok(texts.some((x) => x.includes('¿Ha fallecido?')));
+  assert.ok(texts.some((x) => x.includes('anterior al nacimiento')));
+  assert.equal(consistency(sample().t, new Date(2026, 0, 1)).length, 0, 'el árbol de ejemplo es coherente');
+});
+
+test('inicio: enlace de búsqueda en FamilySearch', async () => {
+  const { familySearchURL } = await import('../js/insights.js');
+  const url = new URL(familySearchURL({ givenName: 'Manuel', surname: 'Herrera Quispe', birth: { date: '1902', place: 'Chiclayo' } }));
+  assert.equal(url.hostname, 'www.familysearch.org');
+  assert.equal(url.searchParams.get('q.surname'), 'Herrera Quispe');
+  assert.equal(url.searchParams.get('q.birthLikeDate.from'), '1900');
+});

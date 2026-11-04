@@ -35,6 +35,7 @@ export class FamilyTree {
     this.families = {};
     this.rootId = null;
     this.name = '';
+    this.dismissed = {}; // preguntas respondidas con "No" (se guardan con el árbol)
     this.listeners = new Set();
     if (data) this.load(data);
   }
@@ -54,11 +55,12 @@ export class FamilyTree {
     }
     this.rootId = this.people[data.rootId] ? data.rootId : Object.keys(this.people)[0] || null;
     this.name = typeof data.name === 'string' ? data.name : '';
+    this.dismissed = data.dismissed && typeof data.dismissed === 'object' ? { ...data.dismissed } : {};
     this.cleanup();
   }
 
   toJSON() {
-    return { version: 1, name: this.name, rootId: this.rootId, people: this.people, families: this.families };
+    return { version: 1, name: this.name, dismissed: this.dismissed, rootId: this.rootId, people: this.people, families: this.families };
   }
 
   onChange(fn) {
@@ -280,6 +282,11 @@ export class FamilyTree {
     return root?.surname ? `Familia ${root.surname}` : 'Mi árbol';
   }
 
+  dismiss(questionId) {
+    this.dismissed[questionId] = true;
+    this.changed();
+  }
+
   rename(name) {
     this.name = (name || '').trim();
     this.changed();
@@ -298,6 +305,7 @@ export class FamilyTree {
     this.families = {};
     this.rootId = null;
     this.name = '';
+    this.dismissed = {};
     this.changed();
   }
 
