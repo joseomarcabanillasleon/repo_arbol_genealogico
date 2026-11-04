@@ -28,7 +28,7 @@ jobs:
     # Solo las publicaciones hacen cola entre sí (los tests de los PR no esperan);
     # no se cancela una publicación a medias.
     concurrency:
-      group: pages
+      group: pages-deploy
       cancel-in-progress: false
     environment:
       name: github-pages
