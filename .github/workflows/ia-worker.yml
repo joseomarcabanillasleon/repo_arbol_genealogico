@@ -1,0 +1,80 @@
+name: Servicio de IA (Cloudflare Worker)
+
+# Crea o actualiza el servicio de IA y conecta la app automáticamente.
+# Las claves NO están en el repositorio: se leen de los secretos de GitHub
+# (Settings → Secrets and variables → Actions). Ver docs/CONFIGURAR-IA.md
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['worker/**']
+
+permissions:
+  contents: write # para guardar la dirección del servicio en js/config.js
+  actions: write  # para volver a publicar la web
+
+concurrency:
+  group: ia-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar que están los 4 secretos
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
+        run: |
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID GEMINI_API_KEY ACCESS_CODE; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Faltan estos secretos:$missing. Añádelos en Settings → Secrets and variables → Actions (ver docs/CONFIGURAR-IA.md)."
+            exit 1
+          fi
+
+      - name: Publicar el servicio en Cloudflare
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          secrets: |
+            GEMINI_API_KEY
+            ACCESS_CODE
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
+
+      - name: Conectar la app con el servicio
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "::warning::No se obtuvo la dirección del servicio. Cópiala del panel de Cloudflare y ponla en js/config.js."
+            exit 0
+          fi
+          URL="${URL%/}"
+          echo "### ✅ Servicio de IA publicado" >> "$GITHUB_STEP_SUMMARY"
+          echo "Dirección: $URL" >> "$GITHUB_STEP_SUMMARY"
+          sed -i "s#^export const AI_ENDPOINT = .*#export const AI_ENDPOINT = '$URL';#" js/config.js
+          if git diff --quiet; then
+            echo "La app ya apuntaba a este servicio."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "Conecta la app con el servicio de IA"
+            git push
+          fi
+          # Un push hecho con GITHUB_TOKEN no lanza otros workflows: se publica la web a mano.
+          gh workflow run pages.yml --ref main
+          echo "La web se está publicando con la IA conectada." >> "$GITHUB_STEP_SUMMARY"

@@ -24,44 +24,61 @@ Según los [términos de la API de Gemini](https://ai.google.dev/gemini-api/term
 
 **Recomendación:** activa la facturación en Google con un **límite de presupuesto** bajo. Para un uso familiar el coste suele ser muy pequeño (pago por uso), pero compruébalo en la [página de precios](https://ai.google.dev/gemini-api/docs/pricing) y en el panel de uso de AI Studio.
 
-## Paso 1. Conseguir la clave de Google Gemini (2 minutos)
+## Configuración desde GitHub, sin ordenador (recomendada)
+
+Se puede hacer todo desde el navegador del móvil (en Safari, usa **aA → Solicitar sitio web de escritorio** para ver los menús de GitHub y Cloudflare). **Nunca pegues claves en un chat ni en un archivo del repositorio**: solo en los secretos de GitHub.
+
+### Paso 1. Clave de Google Gemini (2 minutos)
 
 1. Entra en <https://aistudio.google.com/apikey> con tu cuenta de Google.
-2. Pulsa **«Create API key»** (Crear clave de API) y cópiala. **No la compartas ni la pegues en la app.**
-3. (Recomendado) En Google Cloud, activa la facturación del proyecto de esa clave y crea un **presupuesto con alerta**.
+2. Pulsa **«Create API key»** (Crear clave de API) y cópiala.
+3. (Recomendado) Activa la facturación de ese proyecto con un **presupuesto y alerta** (ver arriba).
 
-## Paso 2. Crear el servicio de IA en Cloudflare (10 minutos)
+### Paso 2. Cuenta y permiso de Cloudflare (5 minutos)
 
-Necesitas una cuenta gratuita en <https://dash.cloudflare.com/sign-up> y Node.js en tu ordenador.
+1. Crea una cuenta gratuita en <https://dash.cloudflare.com/sign-up>.
+2. En el panel, abre **Workers & Pages** una vez. Si te pide elegir un subdominio `workers.dev`, elige uno (por ejemplo tu apellido).
+3. Copia tu **Account ID**: aparece en **Workers & Pages** (columna derecha) o en la página de inicio de tu cuenta.
+4. Crea un permiso (API token): **icono de perfil → My Profile → API Tokens → Create Token →** plantilla **«Edit Cloudflare Workers» → Use template → Continue to summary → Create Token**. Copia el token (solo se muestra una vez).
+
+### Paso 3. Guardar los 4 secretos en GitHub (3 minutos)
+
+Abre <https://github.com/joseomarcabanillasleon/repo_arbol_genealogico/settings/secrets/actions> y pulsa **New repository secret** cuatro veces:
+
+| Name (exacto) | Secret (valor) |
+|---|---|
+| `GEMINI_API_KEY` | la clave del paso 1 |
+| `CLOUDFLARE_API_TOKEN` | el token del paso 2 |
+| `CLOUDFLARE_ACCOUNT_ID` | el Account ID del paso 2 |
+| `ACCESS_CODE` | un código familiar que inventes, p. ej. `naranjos-1946` |
+
+GitHub los guarda cifrados: nadie (ni tú) puede volver a leerlos, solo reemplazarlos.
+
+### Paso 4. Ejecutar la publicación (1 minuto)
+
+1. Abre <https://github.com/joseomarcabanillasleon/repo_arbol_genealogico/actions/workflows/ia-worker.yml>.
+2. Pulsa **Run workflow → Run workflow**.
+3. En 1–2 minutos verás un check verde. El workflow:
+   - publica el servicio en Cloudflare con la clave como secreto,
+   - escribe su dirección en `js/config.js`,
+   - vuelve a publicar la web con la IA conectada.
+
+Después, en cada móvil, la primera vez que se use la IA hay que escribir el **código familiar** en **Inicio → Conectar IA**.
+
+Para **cambiar la clave o el código**: reemplaza el secreto en GitHub y vuelve a pulsar *Run workflow*.
+
+## Alternativa: desde un ordenador con la terminal
 
 ```bash
 git clone https://github.com/joseomarcabanillasleon/repo_arbol_genealogico.git
 cd repo_arbol_genealogico/worker
-
-npx wrangler login                       # abre el navegador para entrar en Cloudflare
-npx wrangler secret put GEMINI_API_KEY   # pega la clave del paso 1
-npx wrangler secret put ACCESS_CODE      # inventa un código familiar, p. ej. "naranjos-1946"
-npx wrangler deploy                      # publica el servicio
+npx wrangler login
+npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put ACCESS_CODE
+npx wrangler deploy        # muestra la dirección del servicio
 ```
 
-Al terminar, `wrangler deploy` muestra la dirección del servicio, algo como:
-`https://raices-ia.TU-USUARIO.workers.dev`
-
-El modelo por defecto es `gemini-flash-latest` (siempre el Flash más reciente). Se puede cambiar en `worker/wrangler.toml` (`MODEL`).
-
-## Paso 3. Conectar la app (1 minuto)
-
-**Opción A — para toda la familia (recomendada):** escribe la dirección en `js/config.js`:
-
-```js
-export const AI_ENDPOINT = 'https://raices-ia.TU-USUARIO.workers.dev';
-```
-
-y publícalo (commit a `main`). La dirección no es secreta: sin el código familiar no sirve.
-
-**Opción B — solo en tu dispositivo:** en la app, **Inicio → Conectar IA** (o menú **⋮ → Inteligencia artificial**), pega la dirección y el código, y pulsa **Probar y guardar**.
-
-En cada móvil de la familia, la primera vez que usen la IA la app les pedirá el **código familiar** (se lo das tú por WhatsApp). Se guarda solo en ese dispositivo.
+Después pon esa dirección en `js/config.js` (`export const AI_ENDPOINT = 'https://…workers.dev';`) y publica, o pégala en **Inicio → Conectar IA** solo en tu dispositivo.
 
 ## Uso
 
@@ -82,4 +99,6 @@ En cada móvil de la familia, la primera vez que usen la IA la app les pedirá e
 | «Código familiar incorrecto» | Escribe el código exacto en *Conectar IA*. |
 | «Falta configurar GEMINI_API_KEY» | Repite `npx wrangler secret put GEMINI_API_KEY`. |
 | «Se ha alcanzado el límite de uso» | Cuota de Google agotada: espera o revisa la facturación en AI Studio. |
+| El workflow falla en «Comprobar que están los 4 secretos» | Falta alguno o el nombre no es exacto (mayúsculas incluidas). |
+| El workflow falla en «Publicar el servicio en Cloudflare» | Revisa el token (plantilla «Edit Cloudflare Workers»), el Account ID y que hayas elegido el subdominio `workers.dev`. |
 | «Error de Gemini: … model …» | Cambia `MODEL` en `wrangler.toml` por un modelo disponible en AI Studio y despliega de nuevo. |
