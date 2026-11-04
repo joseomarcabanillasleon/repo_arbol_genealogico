@@ -487,3 +487,22 @@ legend { font-size: 13px; font-weight: 600; color: var(--muted); padding: 0 6px;
   .row3 label:last-child { grid-column: 1 / -1; }
   .tab { padding: 6px 2px; font-size: 10.5px; }
 }
+
+/* ---------- Pide ayuda a la familia ---------- */
+.helper { z-index: 45; }
+.family-help { display: grid; gap: 12px; }
+.family-help > p { margin: 0; }
+.branches { display: grid; gap: 6px; }
+.branch { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); text-align: left; }
+.branch:hover { border-color: var(--brand); }
+.branch small { display: block; color: var(--muted); font-size: 13px; }
+.branch .q-av { width: 40px; height: 40px; flex: none; }
+.branch-go { width: 20px; height: 20px; margin-left: auto; color: var(--brand-strong); }
+.paste-reply summary { cursor: pointer; color: var(--brand-strong); font-weight: 600; padding: 4px 0; }
+.paste-row { display: flex; gap: 8px; margin-top: 8px; }
+.paste-row input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.reply-list { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.invite-foot { flex-wrap: wrap; }
+.ob-photo { display: flex; }
+.helper .ob-screen h1 { font-size: 28px; }
+.helper img.ob-avatar { object-fit: cover; }

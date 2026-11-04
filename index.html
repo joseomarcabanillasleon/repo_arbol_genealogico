@@ -111,6 +111,19 @@
       <h3 class="home-h">Completa tu árbol</h3>
       <div id="home-question" class="card-box q-card"></div>
 
+      <h3 class="home-h">Pide ayuda a la familia</h3>
+      <div class="card-box family-help">
+        <p class="muted">Los datos de los abuelos están en la memoria de la familia. Envía un enlace por WhatsApp: tu familiar responde desde su móvil, sin cuenta, y su respuesta vuelve a tu árbol.</p>
+        <div id="home-branches" class="branches"></div>
+        <details class="paste-reply">
+          <summary>¿Te han enviado una respuesta? Pégala aquí</summary>
+          <div class="paste-row">
+            <input id="reply-input" type="text" placeholder="Pega el enlace que te enviaron" autocomplete="off" />
+            <button class="btn primary" id="reply-open">Revisar</button>
+          </div>
+        </details>
+      </div>
+
       <h3 class="home-h">Accesos rápidos</h3>
       <div class="quick">
         <button data-quick="add"><span class="qi qi-green"><svg><use href="#i-plus" /></svg></span>Añadir familiar</button>
@@ -183,6 +196,7 @@
   </main>
 
   <div id="onboarding" class="onboarding" hidden></div>
+  <div id="helper" class="onboarding helper" hidden></div>
 
   <dialog id="modal" class="modal">
     <form method="dialog" id="modal-form" novalidate></form>
