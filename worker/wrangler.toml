@@ -1,0 +1,14 @@
+# Configuración del Worker de IA de Raíces. Ver docs/CONFIGURAR-IA.md
+name = "raices-ia"
+main = "raices-ia.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Solo esta web puede usar el Worker (añade http://localhost:8080 para pruebas locales)
+ALLOWED_ORIGINS = "https://joseomarcabanillasleon.github.io"
+MODEL = "gemini-flash-latest"
+MAX_PER_MINUTE = "10"
+
+# Los secretos NO van aquí. Se guardan con:
+#   npx wrangler secret put GEMINI_API_KEY
+#   npx wrangler secret put ACCESS_CODE      (opcional, recomendado)

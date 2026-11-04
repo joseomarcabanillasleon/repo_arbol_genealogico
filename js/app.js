@@ -10,6 +10,7 @@ import { createOnboarding } from './onboarding.js';
 import { questions, completeness, upcoming, consistency, familySearchURL } from './insights.js';
 import { buildInvite, encodePayload, decodePayload, linkFor, parseHash, extractHash, applyReply, resolveSlots, SLOTS } from './share.js';
 import { startHelper } from './helper.js';
+import { aiSettings, saveAiSettings, aiReady, callAI, applyExtraction, storyPayload, roleLabel } from './ai.js';
 
 const STORAGE_KEY = 'raices.tree.v1';
 const PREFS_KEY = 'raices.prefs.v1';
@@ -241,6 +242,9 @@ $('#view-home').addEventListener('click', (e) => {
     case 'tree': return setView('tree');
     case 'poster': return exportPoster();
     case 'relation': return setView('relation');
+    case 'doc': return openDocReader(tree.rootId);
+    case 'story': return openStory(tree.rootId);
+    case 'ai': return openAiSettings();
   }
 });
 
@@ -583,6 +587,8 @@ function renderPanel() {
     <div class="p-actions">
       <button class="btn small primary" data-action="edit"><svg><use href="#i-edit"/></svg>Editar</button>
       <button class="btn small" data-action="add-menu"><svg><use href="#i-plus"/></svg>Añadir familiar</button>
+      <button class="btn small ghost" data-action="ai-doc"><svg><use href="#i-doc"/></svg>Leer documento (IA)</button>
+      <button class="btn small ghost" data-action="ai-story"><svg><use href="#i-spark"/></svg>Escribir su historia (IA)</button>
       <button class="btn small ghost" data-action="invite"><svg><use href="#i-people"/></svg>Pedir datos a la familia</button>
       <a class="btn small ghost" href="${esc(familySearchURL(p))}" target="_blank" rel="noopener"><svg><use href="#i-search"/></svg>Buscar registros</a>
       ${prefs.mode === 'art' && p.id !== state.artBase ? '<button class="btn small ghost" data-action="art-base"><svg><use href="#i-tree"/></svg>Ver su árbol</button>' : ''}
@@ -630,6 +636,8 @@ $('#panel').addEventListener('click', (e) => {
       renderPanel();
       return renderTree({ center: true, animate: true });
     case 'invite': return openInvite(p.id);
+    case 'ai-doc': return openDocReader(p.id);
+    case 'ai-story': return openStory(p.id);
     case 'set-root': tree.setRoot(p.id); toast(`${fullName(p)} es ahora la persona de inicio`); return;
     case 'unlink-parents':
       return confirmDialog('Desvincular de sus padres', `Se quitará el vínculo entre ${fullName(p)} y sus padres. No se borra a nadie.`, 'Desvincular', () => tree.unlinkParents(p.id));
@@ -656,7 +664,7 @@ let onSubmit = null;
 function openModal(html, submit) {
   form.innerHTML = html;
   onSubmit = submit;
-  modal.showModal();
+  if (!modal.open) modal.showModal();
   const first = form.querySelector('input[type=text]:not([disabled]), select, textarea');
   if (first && window.innerWidth > 820) first.focus();
 }
@@ -1113,6 +1121,7 @@ function runAction(action) {
       if (!tree.size) return toast('El árbol está vacío');
       download(`arbol-compartir-${today()}.ged`, exportGedcom(tree, { privateLiving: true }), 'text/plain;charset=utf-8');
       return toast('GEDCOM para compartir exportado: las personas vivas aparecen como «Privado», sin fechas ni lugares.', 5000);
+    case 'ai-settings': return openAiSettings();
     case 'rename':
       return openRename();
     case 'export-json':
@@ -1435,6 +1444,153 @@ async function handleHash() {
   }
   history.replaceState(null, '', location.pathname + location.search);
   openReplyReview(parsed);
+}
+
+// ---------------- inteligencia artificial ----------------
+function personOptions(selected) {
+  return tree.all()
+    .sort((a, b) => fullName(a).localeCompare(fullName(b), 'es'))
+    .map((p) => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(fullName(p))}${lifeYears(p) ? ` (${esc(lifeYears(p))})` : ''}</option>`).join('');
+}
+
+function loadingModal(title, text) {
+  openModal(`
+    <div class="m-head"><h2>${esc(title)}</h2></div>
+    <div class="m-body"><div class="ai-loading"><span class="spinner" aria-hidden="true"></span><span>${esc(text)}</span></div></div>
+    <div class="m-foot"><button class="btn" value="cancel">Cancelar</button></div>`, () => {});
+}
+
+function openAiSettings(note = '') {
+  const s = aiSettings();
+  openModal(`
+    <div class="m-head"><h2>Inteligencia artificial</h2><p>Lee documentos antiguos y escribe historias con Google Gemini.</p></div>
+    <div class="m-body">
+      ${note ? `<p class="ai-note">${esc(note)}</p>` : ''}
+      <p style="margin:0">La IA funciona a través del <strong>servicio de IA de la familia</strong>, que configura una sola vez quien administra el árbol (ver <em>docs/CONFIGURAR-IA.md</em>). La clave de Google nunca se guarda en esta app.</p>
+      <label class="field"><span>Dirección del servicio de IA</span><input type="text" name="endpoint" value="${esc(s.endpoint)}" placeholder="https://raices-ia.tu-usuario.workers.dev" autocomplete="off" /></label>
+      <label class="field"><span>Código familiar (si lo hay)</span><input type="text" name="code" value="${esc(s.code)}" autocomplete="off" /><small>Te lo da quien configuró el servicio. Se guarda solo en este dispositivo.</small></label>
+      <p class="muted" style="margin:0;font-size:13px">🔒 Lo que pidas a la IA (la imagen del documento o los datos de una persona) se envía a Google Gemini para procesarlo. No envíes fotos de niños.</p>
+      <div class="form-error" role="alert"></div>
+    </div>
+    <div class="m-foot"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="test">Probar y guardar</button></div>`,
+  (fd) => {
+    const cand = { endpoint: String(fd.get('endpoint') || '').trim().replace(/\/+$/, ''), code: String(fd.get('code') || '').trim() };
+    const err = form.querySelector('.form-error');
+    if (!/^https?:\/\//.test(cand.endpoint)) { err.textContent = 'Escribe la dirección completa, empezando por https://'; return true; }
+    err.textContent = 'Probando conexión…';
+    callAI('ping', {}, cand)
+      .then((r) => { saveAiSettings(cand); modal.close(); toast(`IA conectada (${r.model || 'Gemini'})`); })
+      .catch((e) => { err.textContent = e.message; });
+    return true;
+  });
+}
+
+function shrinkImage(file, maxSide = 1600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+    img.src = url;
+  });
+}
+
+function openDocReader(anchorId) {
+  if (!aiReady()) return openAiSettings('Para leer documentos primero hay que conectar el servicio de IA.');
+  openModal(`
+    <div class="m-head"><h2>Leer un documento antiguo</h2><p>Partida de bautismo, acta de nacimiento, matrimonio o defunción, libro de familia, esquela, lápida…</p></div>
+    <div class="m-body">
+      <label class="field"><span>¿De quién es el documento?</span><select name="anchor">${personOptions(anchorId)}</select></label>
+      <label class="field"><span>Foto del documento</span><input type="file" name="doc" accept="image/*" /><small>Haz la foto de frente, con buena luz y sin sombras.</small></label>
+      <label class="field"><span>Pista para la IA (opcional)</span><input type="text" name="hint" placeholder="p. ej. partida de bautismo de 1902 en Chiclayo" autocomplete="off" /></label>
+      <p class="muted" style="margin:0;font-size:13px">🔒 La imagen se envía a Google Gemini para leerla. Revisarás todo antes de añadir nada: nunca se sobrescriben tus datos.</p>
+      <div class="form-error" role="alert"></div>
+    </div>
+    <div class="m-foot"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="read">Leer documento</button></div>`,
+  (fd) => {
+    const file = fd.get('doc');
+    if (!file || !file.size) { form.querySelector('.form-error').textContent = 'Elige la foto del documento'; return true; }
+    const anchor = String(fd.get('anchor'));
+    const hint = String(fd.get('hint') || '');
+    loadingModal('Leyendo el documento…', 'La IA está leyendo la letra y buscando nombres, fechas y lugares. Puede tardar unos segundos.');
+    shrinkImage(file)
+      .then((image) => callAI('documento', { image, hint }))
+      .then((r) => showDocResult(r.result, anchor))
+      .catch((e) => { modal.close(); toast(e.message, 6000); });
+    return true;
+  });
+}
+
+function showDocResult(ex, anchorId) {
+  let preview;
+  try {
+    preview = applyExtraction(tree, ex, anchorId, { dryRun: true });
+  } catch (e) {
+    modal.close();
+    return toast(e.message, 6000);
+  }
+  const list = (arr) => `<ul class="reply-list">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  const people = (ex.people || []).map((p) => `<li><strong>${esc(roleLabel(p.role))}:</strong> ${esc([p.givenName, p.surname].filter(Boolean).join(' '))}${p.birthDate ? ` · n. ${esc(formatDate(normalizeDate(p.birthDate)))}` : ''}${p.deathDate ? ` · † ${esc(formatDate(normalizeDate(p.deathDate)))}` : ''}</li>`).join('');
+  const conf = { alta: 'Lectura fiable', media: 'Lectura con dudas: revísala', baja: 'Lectura dudosa: compruébala con el documento' }[ex.confidence] || '';
+  openModal(`
+    <div class="m-head"><h2>${esc(ex.documentType || 'Documento')}</h2><p>${esc([formatDate(normalizeDate(ex.documentDate || '')), ex.documentPlace].filter(Boolean).join(' · '))}${conf ? ` · <span class="conf conf-${esc(ex.confidence)}">${esc(conf)}</span>` : ''}</p></div>
+    <div class="m-body">
+      ${ex.summary ? `<p style="margin:0">${esc(ex.summary)}</p>` : ''}
+      ${people ? `<div><strong>Personas que aparecen:</strong><ul class="reply-list">${people}</ul></div>` : ''}
+      ${preview.changes.length ? `<div><strong>Se añadirá a tu árbol (para ${esc(fullName(tree.get(anchorId)))}):</strong>${list(preview.changes)}</div>` : '<p style="margin:0">No hay datos nuevos para añadir.</p>'}
+      ${preview.conflicts.length ? `<div><strong>Diferencias (no se cambian):</strong>${list(preview.conflicts)}</div>` : ''}
+      ${ex.transcription ? `<details><summary>Ver transcripción</summary><p class="p-notes" style="margin-top:8px">${esc(ex.transcription)}</p></details>` : ''}
+    </div>
+    <div class="m-foot"><button class="btn" value="cancel">Descartar</button>${preview.changes.length ? '<button class="btn primary" value="apply">Añadir al árbol</button>' : ''}</div>`,
+  (_fd, value) => {
+    if (value !== 'apply') return;
+    const res = applyExtraction(tree, ex, anchorId);
+    toast(`Añadidos ${res.changes.length} datos del documento`);
+  });
+}
+
+function openStory(id) {
+  if (!aiReady()) return openAiSettings('Para escribir historias primero hay que conectar el servicio de IA.');
+  openModal(`
+    <div class="m-head"><h2>Escribir su historia</h2><p>Con los datos del árbol (sin fotos). La IA no inventa: si faltan datos, la historia será más corta.</p></div>
+    <div class="m-body">
+      <label class="field"><span>¿De quién?</span><select name="who">${personOptions(id)}</select></label>
+      <div class="field"><span>Para</span><div class="seg">
+        <label><input type="radio" name="aud" value="adultos" checked />Adultos</label>
+        <label><input type="radio" name="aud" value="niños" />Niños</label>
+      </div></div>
+    </div>
+    <div class="m-foot"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="go">Escribir</button></div>`,
+  (fd) => {
+    const who = String(fd.get('who'));
+    const audience = String(fd.get('aud'));
+    loadingModal('Escribiendo…', 'La IA está escribiendo la historia con los datos del árbol.');
+    callAI('historia', { ...storyPayload(tree, who), audience })
+      .then((r) => {
+        const p = tree.get(who);
+        openModal(`
+          <div class="m-head"><h2>Historia de ${esc(p.givenName)}</h2><p>Revísala y corrígela antes de guardarla.</p></div>
+          <div class="m-body"><label class="field"><textarea name="text" rows="10">${esc(r.text)}</textarea></label></div>
+          <div class="m-foot"><button class="btn" value="cancel">Descartar</button><button class="btn primary" value="save">Guardar en su ficha</button></div>`,
+        (fd2, v) => {
+          if (v !== 'save') return;
+          const text = String(fd2.get('text') || '').trim();
+          if (!text) return;
+          tree.updatePerson(who, { notes: [tree.get(who).notes, `Historia${audience === 'niños' ? ' para niños' : ''}: ${text}`].filter(Boolean).join('\n\n') });
+          toast('Historia guardada en su ficha');
+        });
+      })
+      .catch((e) => { modal.close(); toast(e.message, 6000); });
+    return true;
+  });
 }
 
 // ---------------- arranque ----------------
