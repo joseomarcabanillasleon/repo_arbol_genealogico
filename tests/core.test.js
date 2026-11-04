@@ -374,3 +374,98 @@ test('familia: la respuesta rellena huecos y añade personas, sin sobrescribir',
   assert.equal(pilar.birth.place, 'Petrés, Valencia, España');
   assert.throws(() => applyReply(new FamilyTree(), reply), /no está en tu árbol/);
 });
+
+// ---------- IA ----------
+const BAUTISMO = {
+  documentType: 'Partida de bautismo', documentDate: '20 APR 1902', documentPlace: 'Chiclayo, Lambayeque, Perú',
+  summary: 'Bautismo de Manuel, hijo legítimo de Pedro Herrera y Juana Quispe.', transcription: 'En la parroquia de Santa María de Chiclayo…', confidence: 'media',
+  people: [
+    { role: 'principal', givenName: 'Manuel', surname: 'Herrera Quispe', sex: 'M', birthDate: '12 APR 1902', birthPlace: 'Chiclayo, Lambayeque, Perú' },
+    { role: 'padre', givenName: 'Pedro', surname: 'Herrera', sex: 'M', occupation: 'labrador' },
+    { role: 'madre', givenName: 'Juana', surname: 'Quispe', sex: 'F' },
+    { role: 'abuelo_paterno', givenName: 'Tomás', surname: 'Herrera', sex: 'M', deathDate: '1899' },
+    { role: 'padrino', givenName: 'Lorenzo', surname: 'Vílchez', sex: 'M' },
+  ],
+};
+
+test('IA: un documento leído se añade con las mismas reglas seguras', async () => {
+  const { applyExtraction, extractionToReply } = await import('../js/ai.js');
+  const { t, ids } = sample();
+  const reply = extractionToReply(BAUTISMO, ids.manuel);
+  assert.deepEqual(Object.keys(reply.p), ['f', 'm', 'ff']);
+  const before = t.size;
+  const dry = applyExtraction(t, BAUTISMO, ids.manuel, { dryRun: true });
+  assert.equal(t.size, before);
+  const res = applyExtraction(t, BAUTISMO, ids.manuel);
+  assert.deepEqual(res.changes, dry.changes);
+  assert.equal(t.size, before + 3, 'padre, madre y abuelo paterno nuevos');
+  const manuel = t.get(ids.manuel);
+  assert.equal(manuel.birth.date, '1902', 'no sobrescribe el año que ya había');
+  assert.ok(res.conflicts.some((c) => c.includes('12 abr 1902')));
+  assert.match(manuel.notes, /Documento leído con IA: Partida de bautismo · 20 abr 1902/);
+  assert.match(manuel.notes, /Padrino: Lorenzo Vílchez/);
+  const pedro = t.get(t.orderedParents(ids.manuel)[0]);
+  assert.equal(pedro.occupation, 'labrador');
+  const tomas = t.get(t.orderedParents(pedro.id)[0]);
+  assert.equal(tomas.deceased, true);
+  assert.equal(tomas.death.date, '1899');
+});
+
+test('IA: matrimonio añade el cónyuge con la fecha de la boda', async () => {
+  const { applyExtraction } = await import('../js/ai.js');
+  const t = new FamilyTree();
+  const a = t.addPerson({ givenName: 'Andrés', surname: 'Herrera', sex: 'M' });
+  const res = applyExtraction(t, { documentType: 'Acta de matrimonio', documentDate: '5 MAY 1998', documentPlace: 'Lima, Perú', summary: '', confidence: 'alta',
+    people: [{ role: 'principal', givenName: 'Andrés', surname: 'Herrera', sex: 'M' }, { role: 'conyuge', givenName: 'Ana', surname: 'Torres', sex: 'F' }] }, a);
+  assert.ok(res.changes.includes('Nueva persona: Ana Torres (cónyuge)'));
+  const f = t.spouseFamilies(a)[0];
+  assert.equal(f.marriage.date, '5 MAY 1998');
+  // repetir no duplica
+  applyExtraction(t, { documentType: 'Acta de matrimonio', people: [{ role: 'conyuge', givenName: 'Ana', surname: 'Torres', sex: 'F' }] }, a);
+  assert.equal(t.spouses(a).length, 1);
+});
+
+test('IA: la historia se pide sin fotos', async () => {
+  const { storyPayload } = await import('../js/ai.js');
+  const { t, ids } = sample();
+  t.updatePerson(ids.jorge, { photo: 'data:image/jpeg;base64,XXXX' });
+  const p = storyPayload(t, ids.jorge);
+  assert.equal(p.person.nombre, 'Jorge Herrera Vílchez');
+  assert.ok(p.relatives.some((r) => r.parentesco === 'pareja' && r.nombre === 'Carmen Díaz Paredes'));
+  assert.ok(!JSON.stringify(p).includes('base64'));
+});
+
+test('Worker de IA: seguridad y llamada a Gemini (simulada)', async () => {
+  const worker = (await import('../worker/raices-ia.js')).default;
+  const env = { GEMINI_API_KEY: 'clave-secreta', ACCESS_CODE: 'familia', ALLOWED_ORIGINS: 'https://ok.example' };
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    const body = JSON.parse(opts.body);
+    const isDoc = body.generationConfig.responseMimeType === 'application/json';
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: isDoc ? JSON.stringify(BAUTISMO) : 'OK' }] } }] }), { status: 200 });
+  };
+  const req = (path, { origin = 'https://ok.example', code = 'familia', body = {} } = {}) => new Request(`https://w.example${path}`, {
+    method: 'POST', headers: { Origin: origin, 'content-type': 'application/json', 'x-raices-code': code }, body: JSON.stringify(body),
+  });
+  try {
+    assert.equal((await worker.fetch(req('/ping', { origin: 'https://malo.example' }), env)).status, 403);
+    assert.equal((await worker.fetch(req('/ping', { code: 'otro' }), env)).status, 401);
+    assert.equal(calls.length, 0, 'sin origen o código válidos no se llama a Google');
+    const ping = await worker.fetch(req('/ping'), env);
+    assert.equal(ping.status, 200);
+    assert.equal(ping.headers.get('Access-Control-Allow-Origin'), 'https://ok.example');
+    assert.equal(calls[0].opts.headers['x-goog-api-key'], 'clave-secreta');
+    assert.ok(!(await ping.text()).includes('clave-secreta'), 'la clave nunca vuelve al navegador');
+    assert.equal((await worker.fetch(req('/documento', { body: { image: 'no-es-imagen' } }), env)).status, 400);
+    const doc = await worker.fetch(req('/documento', { body: { image: 'data:image/jpeg;base64,/9j/AAAA' } }), env);
+    assert.equal((await doc.json()).result.people[0].givenName, 'Manuel');
+    const sent = JSON.parse(calls.at(-1).opts.body);
+    assert.equal(sent.contents[0].parts[1].inlineData.mimeType, 'image/jpeg');
+    assert.equal(sent.generationConfig.responseSchema.type, 'OBJECT');
+    assert.equal((await worker.fetch(req('/otra'), env)).status, 404);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

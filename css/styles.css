@@ -506,3 +506,12 @@ legend { font-size: 13px; font-weight: 600; color: var(--muted); padding: 0 6px;
 .ob-photo { display: flex; }
 .helper .ob-screen h1 { font-size: 28px; }
 .helper img.ob-avatar { object-fit: cover; }
+
+/* ---------- IA ---------- */
+.ai-loading { display: flex; align-items: center; gap: 14px; padding: 10px 0; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brand); animation: spin 0.9s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-note { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--brand-soft); color: var(--brand-strong); }
+.conf { font-weight: 600; }
+.conf-media { color: color-mix(in srgb, var(--focus-ring) 75%, var(--text)); }
+.conf-baja { color: var(--danger); }

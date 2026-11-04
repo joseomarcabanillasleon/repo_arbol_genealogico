@@ -128,6 +128,7 @@ export function applyReply(tree, reply, { dryRun = false } = {}) {
   const anchor = t.get(reply.a?.id);
   if (!anchor) throw new Error('La persona de esta respuesta no está en tu árbol');
   const by = reply.by || 'un familiar';
+  const noteLabel = reply.noteLabel || `Recuerdo de ${by}`;
   const changes = [];
   const conflicts = [];
 
@@ -153,7 +154,17 @@ export function applyReply(tree, reply, { dryRun = false } = {}) {
     if (d.dec === 1 && !person.deceased) set('deceased', true, 'ha fallecido');
     if (d.dec === 0 && person.deceased) conflicts.push(`${label}: en tu árbol consta como fallecido/a; ${by} indica que vive`);
     if (d.ph && !person.photo) set('photo', d.ph, 'foto añadida');
-    if (d.n) set('notes', [person.notes, `Recuerdo de ${by}: ${d.n}`].filter(Boolean).join('\n\n'), 'nueva historia');
+    // defunción y ocupación (las usan los documentos leídos con IA)
+    const dd = normalizeDate(d.dd || '');
+    if (dd || d.dp) {
+      const death = { ...person.death };
+      if (dd && !death.date) death.date = dd, changes.push(`${label}: defunción ${formatDate(dd)}`);
+      else if (dd && death.date !== dd) conflicts.push(`${label}: defunción — tú tienes ${formatDate(death.date)}, ${by} dice ${formatDate(dd)}`);
+      if (d.dp && !death.place) death.place = d.dp, changes.push(`${label}: lugar de defunción ${d.dp}`);
+      if (death.date !== person.death.date || death.place !== person.death.place) upd.death = death, upd.deceased = true;
+    }
+    if (d.o && !person.occupation) set('occupation', d.o, `ocupación «${d.o}»`);
+    if (d.n) set('notes', [person.notes, `${noteLabel}: ${d.n}`].filter(Boolean).join('\n\n'), 'nueva historia');
     if (Object.keys(upd).length) t.updatePerson(person.id, upd);
   };
 
@@ -177,9 +188,11 @@ export function applyReply(tree, reply, { dryRun = false } = {}) {
       surname: d.s,
       sex: SLOT_SEX[slot],
       birth: { date: normalizeDate(d.b || ''), place: d.bp || '' },
-      deceased: d.dec === 1,
+      deceased: d.dec === 1 || Boolean(d.dd || d.dp),
+      death: { date: normalizeDate(d.dd || ''), place: d.dp || '' },
+      occupation: d.o || '',
       photo: d.ph || '',
-      notes: d.n ? `Recuerdo de ${by}: ${d.n}` : '',
+      notes: d.n ? `${noteLabel}: ${d.n}` : '',
     };
     try {
       ids[slot] = t.addParent(childId, data);

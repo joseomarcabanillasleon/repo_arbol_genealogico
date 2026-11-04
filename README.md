@@ -10,6 +10,7 @@ Funciona en el navegador del ordenador y del móvil, y se puede instalar en el i
 |---|---|
 | **Inicio** | Saludo y anillo de completitud (antepasados directos conocidos hasta bisabuelos). Preguntas de una en una generadas de los huecos reales del árbol (pareja, hijos, padres, abuelos, fechas, fotos, lugares) con Sí / No / Ahora no; el "No" se recuerda. Accesos rápidos, próximos cumpleaños y aniversarios, revisión de datos incoherentes y búsqueda gratuita en FamilySearch. |
 | **Pide ayuda a la familia** | Envía por WhatsApp un enlace sobre una rama (una persona, sus padres y sus abuelos). El familiar responde desde su móvil sin cuenta: nombres, fechas, lugares, si vive, fotos y un recuerdo. Su respuesta vuelve como otro enlace y, antes de añadirla, ves qué se añade y qué diferencias hay. Nunca se sobrescribe lo que ya tenías. Sin servidor: los datos viajan en el fragmento de la URL (`#…`), que el navegador no envía a la web. |
+| **IA (opcional)** | *Leer documento antiguo*: haz una foto de una partida, acta, esquela o lápida y la IA extrae personas, fechas y lugares; revisas y se añade con las mismas reglas seguras (nunca sobrescribe). *Escribir su historia*: biografía breve para adultos o niños con los datos del árbol (sin fotos). Usa Google Gemini a través de un Worker propio que guarda la clave. Configuración única: [docs/CONFIGURAR-IA.md](docs/CONFIGURAR-IA.md). |
 | **Árbol ilustrado** | Inspirado en un póster hecho a mano en casa: la persona y sus hermanos en el tronco, Papá y Mamá en la bifurcación, Abuelitos y Bisabuelos en la copa. Fotos tipo polaroid con etiquetas manuscritas y huecos «¿Abuelita?» para completar. Se dibuja por código, así que se adapta a cualquier familia. |
 | **Póster para imprimir** | Descarga el árbol ilustrado como imagen PNG de alta resolución (≈3500 px, apta para A3). En el iPhone se abre el menú de compartir para guardarlo o imprimirlo. |
 | **Primeros pasos guiados** | Pantalla "¿Cómo quieres empezar?" (crear, importar GEDCOM o ver ejemplo), introducción breve y asistente paso a paso: tú → madre → padre → abuelos, con apellidos sugeridos y casilla "Vive". Al terminar, mensaje de bienvenida. |
@@ -80,6 +81,9 @@ js/onboarding.js      Primeros pasos: elección inicial, introducción y asisten
 js/avatars.js         Siluetas de avatar para personas sin foto
 js/share.js           Enlaces de invitación/respuesta (comprimidos) y fusión segura de respuestas
 js/helper.js          Pantalla del familiar que responde a la invitación
+js/ai.js              Cliente de IA: ajustes, documentos leídos → cambios seguros, datos para historias
+js/config.js          Dirección del servicio de IA (la rellena el administrador una vez)
+worker/               Cloudflare Worker que guarda la clave de Gemini y limita el uso
 js/insights.js        Lógica del Inicio: preguntas, completitud, aniversarios y revisión de datos
 js/illustrated.js     Árbol ilustrado (tronco, ramas, copa, polaroids) y su cálculo de posiciones
 fonts/                Fuente manuscrita Patrick Hand (licencia SIL OFL, incluida para uso sin conexión)
