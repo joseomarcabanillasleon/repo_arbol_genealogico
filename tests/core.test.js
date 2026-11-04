@@ -324,3 +324,53 @@ test('inicio: enlace de búsqueda en FamilySearch', async () => {
   assert.equal(url.searchParams.get('q.surname'), 'Herrera Quispe');
   assert.equal(url.searchParams.get('q.birthLikeDate.from'), '1900');
 });
+
+test('familia: enlace de invitación ida y vuelta, comprimido y sin fotos', async () => {
+  const { buildInvite, encodePayload, decodePayload, linkFor, parseHash, extractHash } = await import('../js/share.js');
+  const { t, ids } = sample();
+  t.updatePerson(ids.lucia, { photo: 'data:image/jpeg;base64,AAAA' });
+  const inv = buildInvite(t, ids.ricardo, 'Daniel');
+  assert.equal(inv.a.g, 'Ricardo');
+  assert.equal(inv.k.f.g, 'Jorge');
+  assert.equal(inv.k.ff.g, 'Manuel');
+  assert.ok(!JSON.stringify(inv).includes('base64'), 'las fotos no viajan en la invitación');
+  const enc = await encodePayload(inv);
+  const url = linkFor('https://x.github.io/app/?a=1#viejo', 'ayuda', enc);
+  assert.ok(url.startsWith('https://x.github.io/app/?a=1#ayuda=z'));
+  const parsed = parseHash(new URL(url).hash);
+  assert.deepEqual(await decodePayload(parsed.data), inv);
+  assert.equal(extractHash(`Mira: ${url} gracias`), new URL(url).hash);
+});
+
+test('familia: la respuesta rellena huecos y añade personas, sin sobrescribir', async () => {
+  const { applyReply } = await import('../js/share.js');
+  const { t, ids } = sample();
+  const before = t.size;
+  const reply = {
+    v: 1, t: 'reply', by: 'Rosa',
+    a: { id: ids.lucia, b: '1970', bp: 'Valencia, España', n: 'Le encantaba cantar.' },
+    p: {
+      f: { g: 'José', s: 'Soler Roig', b: '1939', bp: 'Valencia, España', dec: 1 },
+      m: { g: 'Pilar', s: 'Navarro Gil', b: '1942', bp: 'Petrés, Valencia, España', dec: 0 },
+      mf: { g: 'Joaquín', s: 'Navarro Sanz', b: 'hacia 1910', bp: 'Petrés', dec: 1 },
+      mm: { g: 'Teresa', s: 'Gil Peris', b: '', bp: '', dec: 1 },
+    },
+  };
+  const dry = applyReply(t, reply, { dryRun: true });
+  assert.equal(t.size, before, 'el modo prueba no cambia el árbol');
+  const res = applyReply(t, reply);
+  assert.deepEqual(res.changes, dry.changes);
+  assert.equal(t.size, before + 2, 'se añaden los dos bisabuelos maternos que faltaban');
+  assert.ok(res.changes.includes('Nueva persona: Joaquín Navarro Sanz (abuelo materno de Lucía)'), res.changes.join(' | '));
+  const lucia = t.get(ids.lucia);
+  assert.equal(lucia.birth.date, '22 SEP 1966', 'no se sobrescribe la fecha que ya existía');
+  assert.ok(res.conflicts.some((c) => c.includes('1966') && c.includes('1970')));
+  assert.match(lucia.notes, /Recuerdo de Rosa: Le encantaba cantar\./);
+  const pilar = t.get(t.orderedParents(ids.lucia).find((id) => t.get(id).sex === 'F'));
+  const [joaquin, teresa] = t.orderedParents(pilar.id).map((id) => t.get(id));
+  assert.equal(joaquin.givenName, 'Joaquín');
+  assert.equal(joaquin.birth.date, 'ABT 1910');
+  assert.equal(teresa.deceased, true);
+  assert.equal(pilar.birth.place, 'Petrés, Valencia, España');
+  assert.throws(() => applyReply(new FamilyTree(), reply), /no está en tu árbol/);
+});

@@ -8,6 +8,8 @@ import { silhouetteSVG, silhouetteInner, silhouetteInline } from './avatars.js';
 import { illustratedLayout, renderIllustrated } from './illustrated.js';
 import { createOnboarding } from './onboarding.js';
 import { questions, completeness, upcoming, consistency, familySearchURL } from './insights.js';
+import { buildInvite, encodePayload, decodePayload, linkFor, parseHash, extractHash, applyReply, resolveSlots, SLOTS } from './share.js';
+import { startHelper } from './helper.js';
 
 const STORAGE_KEY = 'raices.tree.v1';
 const PREFS_KEY = 'raices.prefs.v1';
@@ -195,6 +197,8 @@ function renderHome() {
       return `<button class="hl-row${u.inDays === 0 ? ' today' : ''}" data-goto="${ps[0].id}"><span class="hl-ico">${icon}</span><span><strong>${esc(text)}</strong><small>${fmt(u.date)} · ${when(u.inDays)}</small></span></button>`;
     }).join('')
     : '<p class="muted hl-empty">No hay fechas en los próximos 45 días. Añade fechas completas (día, mes y año) para ver aquí cumpleaños y aniversarios.</p>';
+
+  renderBranches();
 
   // revisión de datos
   const issues = consistency(tree);
@@ -579,6 +583,7 @@ function renderPanel() {
     <div class="p-actions">
       <button class="btn small primary" data-action="edit"><svg><use href="#i-edit"/></svg>Editar</button>
       <button class="btn small" data-action="add-menu"><svg><use href="#i-plus"/></svg>Añadir familiar</button>
+      <button class="btn small ghost" data-action="invite"><svg><use href="#i-people"/></svg>Pedir datos a la familia</button>
       <a class="btn small ghost" href="${esc(familySearchURL(p))}" target="_blank" rel="noopener"><svg><use href="#i-search"/></svg>Buscar registros</a>
       ${prefs.mode === 'art' && p.id !== state.artBase ? '<button class="btn small ghost" data-action="art-base"><svg><use href="#i-tree"/></svg>Ver su árbol</button>' : ''}
       ${isRoot ? '' : '<button class="btn small ghost" data-action="set-root"><svg><use href="#i-home"/></svg>Hacer inicio</button>'}
@@ -624,6 +629,7 @@ $('#panel').addEventListener('click', (e) => {
       savePrefs();
       renderPanel();
       return renderTree({ center: true, animate: true });
+    case 'invite': return openInvite(p.id);
     case 'set-root': tree.setRoot(p.id); toast(`${fullName(p)} es ahora la persona de inicio`); return;
     case 'unlink-parents':
       return confirmDialog('Desvincular de sus padres', `Se quitará el vínculo entre ${fullName(p)} y sus padres. No se borra a nadie.`, 'Desvincular', () => tree.unlinkParents(p.id));
@@ -930,7 +936,7 @@ function openUnionForm(famId) {
   });
 }
 
-function resizeImage(file, max) {
+function resizeImage(file, max, quality = 0.82) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -941,7 +947,7 @@ function resizeImage(file, max) {
       c.width = c.height = Math.min(max, side);
       c.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.82));
+      resolve(c.toDataURL('image/jpeg', quality));
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img')); };
     img.src = url;
@@ -1274,7 +1280,7 @@ const onboarding = createOnboarding({
 
 function syncChrome() {
   const empty = tree.size === 0;
-  if (empty) onboarding.show();
+  if (empty && !state.helper) onboarding.show();
   else onboarding.hide();
   $('#tree-name').textContent = tree.displayName();
   $('#tree-count').textContent = empty ? '' : `${tree.size} ${tree.size === 1 ? 'persona' : 'personas'}`;
@@ -1304,8 +1310,137 @@ $('#search-toggle').addEventListener('click', () => {
 });
 $('#search').addEventListener('blur', () => setTimeout(() => !$('#search').value && document.body.classList.remove('search-open'), 200));
 
+// ---------------- pide ayuda a la familia ----------------
+const baseUrl = () => location.href.split('#')[0];
+
+/** Ramas sugeridas: tú, tus padres y tus abuelos, con cuántos antepasados les faltan. */
+function renderBranches() {
+  const box = $('#home-branches');
+  if (!box) return;
+  const root = tree.rootId;
+  const cand = [root, ...tree.orderedParents(root)];
+  for (const pid of tree.orderedParents(root)) cand.push(...tree.orderedParents(pid));
+  const rows = cand.map((id) => {
+    const p = tree.get(id);
+    const slots = resolveSlots(tree, id);
+    const missing = SLOTS.filter((sl) => !slots[sl]).length;
+    const rel = id === root ? 'tu rama' : tree.parents(root).includes(id) ? (p.sex === 'F' ? 'tu madre' : p.sex === 'M' ? 'tu padre' : 'tu progenitor') : (p.sex === 'F' ? 'tu abuela' : 'tu abuelo');
+    return { p, missing, rel };
+  });
+  box.innerHTML = rows.map(({ p, missing, rel }) => `
+    <button class="branch" data-invite="${p.id}">
+      ${personAvatar(p, 'q-av')}
+      <span><strong>Familia de ${esc(p.givenName.split(/\s+/)[0] || fullName(p))}</strong><small>${esc(rel)} · ${missing ? `faltan ${missing} de 6 antepasados` : 'rama completa: pedir fechas y fotos'}</small></span>
+      <svg class="branch-go"><use href="#i-link"/></svg>
+    </button>`).join('');
+}
+
+$('#view-home').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-invite]');
+  if (b) openInvite(b.dataset.invite);
+});
+$('#reply-open').addEventListener('click', () => {
+  const h = extractHash($('#reply-input').value);
+  if (!h) return toast('Ese texto no contiene un enlace de respuesta de Raíces');
+  $('#reply-input').value = '';
+  openReplyReview(parseHash(h));
+});
+
+async function openInvite(anchorId) {
+  const a = tree.get(anchorId);
+  if (!a) return;
+  const me = tree.get(tree.rootId);
+  const from = me?.givenName.split(/\s+/)[0] || '';
+  const url = linkFor(baseUrl(), 'ayuda', await encodePayload(buildInvite(tree, anchorId, from)));
+  const msg = `Hola 👋 Estoy haciendo el árbol de la ${tree.displayName()}. ¿Me ayudas con la familia de ${a.givenName}? Son unas preguntas cortas, sin registrarte: ${url}`;
+  openModal(`
+    <div class="m-head"><h2>Pedir datos a la familia</h2><p>Rama de <strong>${esc(fullName(a))}</strong></p></div>
+    <div class="m-body">
+      <p style="margin:0">Envía este enlace a quien mejor conozca a la familia de ${esc(a.givenName)} (por ejemplo, ${a.sex === 'F' ? 'ella misma, sus hermanos o sus hijos' : 'él mismo, sus hermanos o sus hijos'}). Verá lo que ya sabes de ${esc(a.givenName)}, sus padres y sus abuelos, y podrá completar nombres, fechas, lugares, fotos y recuerdos.</p>
+      <p class="muted" style="margin:0;font-size:14px">🔒 El enlace incluye esos nombres y fechas (sin fotos). No pasa por ningún servidor de Raíces: solo lo verá a quien se lo envíes.</p>
+    </div>
+    <div class="m-foot invite-foot">
+      <button class="btn ghost" value="cancel">Cerrar</button>
+      <button class="btn" type="button" data-inv="copy">Copiar enlace</button>
+      ${navigator.share ? '<button class="btn" type="button" data-inv="share">Compartir…</button>' : ''}
+      <button class="btn primary" type="button" data-inv="wa">Enviar por WhatsApp</button>
+    </div>`, () => true);
+  form.querySelectorAll('[data-inv]').forEach((b) => b.addEventListener('click', async () => {
+    if (b.dataset.inv === 'wa') window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+    if (b.dataset.inv === 'share') { try { await navigator.share({ text: msg }); } catch { /* cancelado */ } }
+    if (b.dataset.inv === 'copy') {
+      try { await navigator.clipboard.writeText(url); toast('Enlace copiado'); } catch { window.prompt('Copia este enlace:', url); }
+    }
+  }));
+}
+
+async function openReplyReview(parsed) {
+  let reply;
+  try {
+    reply = await decodePayload(parsed.data);
+  } catch (err) {
+    return toast(`No se pudo leer el enlace: ${err.message}`, 5000);
+  }
+  if (!tree.get(reply.a?.id)) {
+    const link = linkFor(baseUrl(), 'respuesta', parsed.data);
+    openModal(`
+      <div class="m-head"><h2>Respuesta de ${esc(reply.by || 'un familiar')}</h2><p>Para el árbol de la ${esc(reply.fam || 'familia')}</p></div>
+      <div class="m-body">
+        <p style="margin:0">Aquí no está el árbol al que pertenece esta respuesta.</p>
+        <p style="margin:0">En el iPhone, la app de la pantalla de inicio y Safari guardan los datos por separado. Haz esto:</p>
+        <ol style="margin:0;padding-left:20px"><li>Pulsa <strong>Copiar enlace</strong>.</li><li>Abre <strong>Raíces desde el icono</strong> de tu pantalla de inicio.</li><li>En <strong>Inicio → Pide ayuda a la familia</strong>, pega el enlace y pulsa <strong>Revisar</strong>.</li></ol>
+      </div>
+      <div class="m-foot"><button class="btn" value="cancel">Cerrar</button><button class="btn primary" type="button" id="copy-reply">Copiar enlace</button></div>`, () => {});
+    $('#copy-reply').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(link); toast('Enlace copiado'); } catch { window.prompt('Copia este enlace:', link); }
+    });
+    return;
+  }
+  let preview;
+  try {
+    preview = applyReply(tree, reply, { dryRun: true });
+  } catch (err) {
+    return toast(err.message, 5000);
+  }
+  const list = (arr) => `<ul class="reply-list">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  openModal(`
+    <div class="m-head"><h2>Respuesta de ${esc(reply.by || 'un familiar')} 💚</h2><p>Para la rama de ${esc(fullName(tree.get(reply.a.id)))}</p></div>
+    <div class="m-body">
+      ${preview.changes.length ? `<div><strong>Se añadirá a tu árbol:</strong>${list(preview.changes)}</div>` : '<p style="margin:0">No trae datos nuevos: todo lo que contesta ya estaba en tu árbol.</p>'}
+      ${preview.conflicts.length ? `<div><strong>Diferencias (no se cambian, revísalas tú):</strong>${list(preview.conflicts)}</div>` : ''}
+      <p class="muted" style="margin:0;font-size:14px">Nunca se sobrescribe lo que ya tenías: solo se rellenan huecos y se añaden personas.</p>
+    </div>
+    <div class="m-foot"><button class="btn" value="cancel">Ahora no</button>${preview.changes.length ? '<button class="btn primary" value="apply">Añadir al árbol</button>' : ''}</div>`,
+  (_fd, value) => {
+    if (value !== 'apply') return;
+    const res = applyReply(tree, reply);
+    toast(`Añadidos ${res.changes.length} datos de ${reply.by || 'tu familiar'}`);
+  });
+}
+
+async function handleHash() {
+  const parsed = parseHash(location.hash);
+  if (!parsed) return;
+  if (parsed.kind === 'ayuda') {
+    let invite;
+    try {
+      invite = await decodePayload(parsed.data);
+    } catch (err) {
+      return toast(`No se pudo abrir la invitación: ${err.message}`, 6000);
+    }
+    state.helper = true;
+    onboarding.hide();
+    startHelper({ root: $('#helper'), invite, baseUrl: baseUrl(), resizeImage });
+    return;
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+  openReplyReview(parsed);
+}
+
 // ---------------- arranque ----------------
 setView(tree.size ? 'home' : 'tree');
+handleHash();
+window.addEventListener('hashchange', handleHash);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
